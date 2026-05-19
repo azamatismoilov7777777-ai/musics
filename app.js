@@ -1814,53 +1814,73 @@ el.inputSearchFriend.addEventListener("input", (e) => {
     if (friendSearchDebounce) clearTimeout(friendSearchDebounce);
 
     friendSearchDebounce = setTimeout(async () => {
-        if (query.toLowerCase() === state.currentUser.username.toLowerCase()) {
-            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">O'zingizni do'st qilib qo'sha olmaysiz</div>`;
+        if (!state.currentUser) return;
+
+        // 1. Search locally in state.registeredUsers (allowing partial match)
+        const matchedUsers = state.registeredUsers.filter(u => 
+            u.username.toLowerCase().includes(query.toLowerCase()) && 
+            u.username.toLowerCase() !== state.currentUser.username.toLowerCase()
+        );
+
+        if (matchedUsers.length > 0) {
+            el.friendSearchResults.innerHTML = matchedUsers.map(user => {
+                const isAlreadyFriend = state.friends.some(f => f.username.toLowerCase() === user.username.toLowerCase());
+                return `
+                    <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 4px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <span class="search-result-name" style="color:#fff; font-size:13px;">${user.username}</span>
+                        ${isAlreadyFriend ? 
+                            `<span style="color:var(--text-grey); font-size:11px;">Allaqachon do'st</span>` : 
+                            `<button class="btn-add-friend-action" data-username="${user.username}" style="background:var(--spotify-green); border:none; color:#000; padding:2px 8px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:bold;"><i class="fa-solid fa-plus"></i> Qo'shish</button>`
+                        }
+                    </div>
+                `;
+            }).join('');
+
+            el.friendSearchResults.querySelectorAll(".btn-add-friend-action").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const uname = btn.getAttribute("data-username");
+                    addFriend(uname);
+                });
+            });
             return;
         }
 
-        if (state.friends.some(f => f.username.toLowerCase() === query.toLowerCase())) {
-            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">Allaqachon do'stlar ro'yxatida</div>`;
-            return;
-        }
-
+        // 2. Cloud check fallback (for exact match in case the user registered from another device/browser)
         el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);"><i class="fa-solid fa-spinner fa-spin"></i> Qidirilmoqda...</div>`;
 
-        // 1. Local check
-        const localUser = state.registeredUsers.find(u => u.username.toLowerCase() === query.toLowerCase());
-        if (localUser) {
-            showSearchResult(localUser.username);
-            return;
-        }
-
-        // 2. Cloud check
         try {
             const userData = await kvdbGet(`user_${query.toLowerCase()}`);
             if (userData && userData.username) {
-                showSearchResult(userData.username);
+                if (userData.username.toLowerCase() === state.currentUser.username.toLowerCase()) {
+                    el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">O'zingizni do'st qilib qo'sha olmaysiz</div>`;
+                    return;
+                }
+                const isAlreadyFriend = state.friends.some(f => f.username.toLowerCase() === userData.username.toLowerCase());
+                el.friendSearchResults.innerHTML = `
+                    <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 4px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <span class="search-result-name" style="color:#fff; font-size:13px;">${userData.username}</span>
+                        ${isAlreadyFriend ? 
+                            `<span style="color:var(--text-grey); font-size:11px;">Allaqachon do'st</span>` : 
+                            `<button class="btn-add-friend-action" data-username="${userData.username}" style="background:var(--spotify-green); border:none; color:#000; padding:2px 8px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:bold;"><i class="fa-solid fa-plus"></i> Qo'shish</button>`
+                        }
+                    </div>
+                `;
+
+                const btn = el.friendSearchResults.querySelector(".btn-add-friend-action");
+                if (btn) {
+                    btn.addEventListener("click", () => {
+                        addFriend(userData.username);
+                    });
+                }
             } else {
                 el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
             }
         } catch (err) {
             console.error("Search friend error:", err);
-            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Bunday foydalanuvchi topilmadi (tarmoq xatosi)</div>`;
+            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
         }
-    }, 600);
+    }, 300);
 });
-
-function showSearchResult(foundUsername) {
-    el.friendSearchResults.innerHTML = `
-        <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 4px; border-bottom:1px solid rgba(255,255,255,0.05);">
-            <span class="search-result-name" style="color:#fff; font-size:13px;">${foundUsername}</span>
-            <button class="btn-add-friend-action" data-username="${foundUsername}" style="background:var(--spotify-green); border:none; color:#000; padding:2px 8px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:bold;"><i class="fa-solid fa-plus"></i> Qo'shish</button>
-        </div>
-    `;
-
-    const btn = el.friendSearchResults.querySelector(".btn-add-friend-action");
-    btn.addEventListener("click", () => {
-        addFriend(foundUsername);
-    });
-}
 
 function addFriend(username) {
     const newFriend = {
