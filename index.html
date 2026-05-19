@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeStream - Sening Musiqiy Olaming</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Main Style -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Identity Services (GIS) and EmailJS SDKs -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container" id="logo-home">
+                <i class="fa-solid fa-wind logo-icon"></i>
+                <span class="logo-text">VibeStream</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" id="btn-home">
+                    <i class="fa-solid fa-house"></i>
+                    <span>Bosh sahifa</span>
+                </button>
+            </nav>
+
+            <!-- Library Section -->
+            <div class="sidebar-section library-section">
+                <div class="section-header">
+                    <span class="section-title"><i class="fa-solid fa-lines-leaning"></i> Kutubxonangiz</span>
+                    <button class="add-btn" id="btn-create-playlist" title="Playlist yaratish">
+                        <i class="fa-solid fa-plus"></i> Yaratish
+                    </button>
+                </div>
+                <div class="playlist-list scrollbar-custom" id="playlists-container">
+                    <!-- Dynamic playlists will be injected here -->
+                </div>
+            </div>
+
+            <!-- Friends Section -->
+            <div class="sidebar-section friends-section">
+                <div class="section-header">
+                    <span class="section-title"><i class="fa-solid fa-users"></i> Do'stlar</span>
+                    <button class="add-btn" id="btn-toggle-find-friend" title="Do'st qo'shish">
+                        <i class="fa-solid fa-user-plus"></i> Qo'shish
+                    </button>
+                </div>
+                
+                <!-- Search Friend Container (Toggled) -->
+                <div class="friend-search-container hidden" id="friend-search-box">
+                    <div class="search-input-wrapper">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="input-search-friend" placeholder="Username yozing...">
+                        <button id="btn-close-friend-search"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="friend-search-results" id="friend-search-results">
+                        <!-- Search results injected here -->
+                    </div>
+                </div>
+
+                <div class="friends-list scrollbar-custom" id="friends-container">
+                    <!-- Friends list injected here -->
+                </div>
+            </div>
+
+            <!-- Sidebar Footer Links -->
+            <div class="sidebar-footer">
+                <div class="footer-links">
+                    <a href="#">Legal</a>
+                    <a href="#">Xavfsizlik</a>
+                    <a href="#">Maxfiylik</a>
+                    <a href="#">Cookie</a>
+                </div>
+                <button class="lang-btn">
+                    <i class="fa-solid fa-globe"></i> O'zbekcha
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="header-left">
+                    <div class="navigation-arrows">
+                        <button class="arrow-btn" id="btn-back"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button class="arrow-btn" id="btn-forward"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                    <!-- Global Search Bar -->
+                    <div class="global-search-bar">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input type="text" id="global-search-input" placeholder="Nima tinglashni xohlaysiz?">
+                        <button class="clear-search-btn hidden" id="clear-search-btn"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="header-right" id="auth-buttons-container">
+                    <!-- Logged Out View -->
+                    <div class="auth-logged-out" id="auth-logged-out">
+                        <button class="signup-btn" id="btn-open-signup">Sign up</button>
+                        <button class="login-btn" id="btn-open-login">Log in</button>
+                    </div>
+                    <!-- Logged In View -->
+                    <div class="auth-logged-in hidden" id="auth-logged-in">
+                        <span class="user-display" id="user-display-name">Azamatismoilov</span>
+                        <div class="user-avatar" id="btn-user-menu">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <!-- User Dropdown Menu -->
+                        <div class="user-dropdown-menu hidden" id="user-dropdown">
+                            <button id="btn-logout"><i class="fa-solid fa-right-from-bracket"></i> Chiqish</button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Views Container -->
+            <div class="view-container scrollbar-custom" id="view-container">
+                
+                <!-- 1. Home View -->
+                <section class="content-view" id="view-home">
+                    <!-- Category: Trending Songs -->
+                    <div class="content-shelf">
+                        <div class="shelf-header">
+                            <h2>Trending Songs</h2>
+                            <button class="show-all-btn">Show all</button>
+                        </div>
+                        <div class="carousel-container">
+                            <div class="horizontal-scroll" id="trending-songs-list">
+                                <!-- Dynamic song cards -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category: Popular Artists -->
+                    <div class="content-shelf">
+                        <div class="shelf-header">
+                            <h2>Popular artists</h2>
+                            <button class="show-all-btn">Show all</button>
+                        </div>
+                        <div class="carousel-container">
+                            <div class="horizontal-scroll" id="popular-artists-list">
+                                <!-- Dynamic artist cards -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category: Chill Vibes -->
+                    <div class="content-shelf">
+                        <div class="shelf-header">
+                            <h2>Chill Vibes</h2>
+                            <button class="show-all-btn">Show all</button>
+                        </div>
+                        <div class="carousel-container">
+                            <div class="horizontal-scroll" id="chill-vibes-list">
+                                <!-- Dynamic chill cards -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category: Workout Power -->
+                    <div class="content-shelf">
+                        <div class="shelf-header">
+                            <h2>Workout Energy</h2>
+                            <button class="show-all-btn">Show all</button>
+                        </div>
+                        <div class="carousel-container">
+                            <div class="horizontal-scroll" id="workout-list">
+                                <!-- Dynamic workout cards -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category: Uzbek Vibe -->
+                    <div class="content-shelf">
+                        <div class="shelf-header">
+                            <h2>Uzbek Vibe</h2>
+                            <button class="show-all-btn">Show all</button>
+                        </div>
+                        <div class="carousel-container">
+                            <div class="horizontal-scroll" id="uzbek-vibe-list">
+                                <!-- Dynamic Uzbek music cards -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category: New Releases -->
+                    <div class="content-shelf">
+                        <div class="shelf-header">
+                            <h2>New Releases</h2>
+                            <button class="show-all-btn">Show all</button>
+                        </div>
+                        <div class="carousel-container">
+                            <div class="horizontal-scroll" id="new-releases-list">
+                                <!-- Dynamic new release cards -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category: Focus & Study -->
+                    <div class="content-shelf">
+                        <div class="shelf-header">
+                            <h2>Focus & Study</h2>
+                            <button class="show-all-btn">Show all</button>
+                        </div>
+                        <div class="carousel-container">
+                            <div class="horizontal-scroll" id="focus-study-list">
+                                <!-- Dynamic focus cards -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. Search View -->
+                <section class="content-view hidden" id="view-search">
+                    <div class="search-results-section">
+                        <h2>Qidiruv Natijalari</h2>
+                        <div class="songs-grid" id="search-songs-results">
+                            <!-- Song items matched -->
+                        </div>
+                        <div class="artists-grid" id="search-artists-results">
+                            <!-- Artist items matched -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. Artist Profile View -->
+                <section class="content-view hidden" id="view-artist">
+                    <div class="artist-banner" id="artist-banner">
+                        <div class="artist-banner-overlay"></div>
+                        <div class="artist-banner-content">
+                            <span class="verified-badge"><i class="fa-solid fa-circle-check"></i> Verified by VibeStream</span>
+                            <h1 id="artist-profile-name">Eminem</h1>
+                            <span class="listeners-count" id="artist-profile-listeners">77,051,641 monthly listeners</span>
+                        </div>
+                    </div>
+
+                    <div class="artist-action-bar">
+                        <button class="play-main-btn" id="btn-play-artist">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                        <button class="circle-action-btn" id="btn-shuffle-artist"><i class="fa-solid fa-shuffle"></i></button>
+                        <button class="outline-action-btn" id="btn-follow-artist">Following</button>
+                        <button class="dots-action-btn"><i class="fa-solid fa-ellipsis"></i></button>
+                    </div>
+
+                    <div class="artist-popular-section">
+                        <h2>Popular</h2>
+                        <div class="song-table-header">
+                            <span class="col-num">#</span>
+                            <span class="col-title">Sarlavha</span>
+                            <span class="col-plays"><i class="fa-regular fa-eye"></i> Tinglashlar</span>
+                            <span class="col-duration"><i class="fa-regular fa-clock"></i></span>
+                            <span class="col-actions"></span>
+                        </div>
+                        <div class="song-table-body" id="artist-popular-songs-list">
+                            <!-- Dynamic popular songs -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. Playlist View -->
+                <section class="content-view hidden" id="view-playlist">
+                    <div class="playlist-header">
+                        <div class="playlist-cover-art" id="playlist-cover-art-container">
+                            <i class="fa-solid fa-music"></i>
+                        </div>
+                        <div class="playlist-header-details">
+                            <span class="playlist-type">Private Playlist</span>
+                            <h1 id="playlist-title-display">My Playlist #1</h1>
+                            <div class="playlist-meta-info">
+                                <span class="owner-name" id="playlist-owner">Azamatismoilov</span>
+                                <span class="bullet">&bull;</span>
+                                <span class="playlist-songs-count" id="playlist-songs-count">0 ta qo'shiq</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="playlist-action-bar">
+                        <button class="play-main-btn" id="btn-play-playlist">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                        <button class="dots-action-btn" id="btn-delete-playlist" title="Playlistni o'chirish"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+
+                    <div class="playlist-songs-section">
+                        <div class="song-table-header">
+                            <span class="col-num">#</span>
+                            <span class="col-title">Sarlavha</span>
+                            <span class="col-album">Albom</span>
+                            <span class="col-duration"><i class="fa-regular fa-clock"></i></span>
+                            <span class="col-actions"></span>
+                        </div>
+                        <div class="song-table-body" id="playlist-songs-list">
+                            <!-- Added songs will show here -->
+                        </div>
+                    </div>
+
+                    <!-- Search to Add songs to playlist -->
+                    <div class="playlist-find-songs">
+                        <div class="find-songs-header">
+                            <h2>Let's find something for your playlist</h2>
+                            <button class="close-find-songs" id="btn-close-find-songs"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div class="playlist-search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="playlist-song-search-input" placeholder="Qo'shiq yoki artist nomi...">
+                        </div>
+                        <div class="playlist-search-results" id="playlist-search-results">
+                            <!-- Songs found to add -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. Chat View (Telegram-like Chat with Friends) -->
+                <section class="content-view hidden" id="view-chat">
+                    <div class="chat-container">
+                        <div class="chat-header">
+                            <div class="chat-header-info">
+                                <div class="chat-avatar">
+                                    <i class="fa-solid fa-user-ninja"></i>
+                                </div>
+                                <div class="chat-details">
+                                    <h2 id="chat-friend-name">Do'st nomi</h2>
+                                    <span class="chat-status online">online</span>
+                                </div>
+                            </div>
+                            <div class="chat-header-actions">
+                                <button class="chat-action-btn" id="btn-close-chat" title="Chatni yopish"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="chat-messages-area scrollbar-custom" id="chat-messages-container">
+                            <!-- Message bubbles go here -->
+                        </div>
+
+                        <div class="chat-input-bar">
+                            <input type="text" id="chat-message-input" placeholder="Xabar yozing...">
+                            <button class="send-message-btn" id="btn-send-message">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Bottom Music Player Bar -->
+        <footer class="player-bar">
+            <!-- Left: Current Song Info -->
+            <div class="player-left">
+                <div class="song-thumbnail" id="player-song-img">
+                    <i class="fa-solid fa-music"></i>
+                </div>
+                <div class="song-info-meta">
+                    <span class="song-title-scrolling" id="player-song-title">Ijro etilmayapti</span>
+                    <span class="song-artist" id="player-song-artist">VibeStream</span>
+                </div>
+                <button class="player-icon-btn" id="btn-player-add-playlist" title="Playlistga qo'shish"><i class="fa-regular fa-plus"></i></button>
+                <button class="player-icon-btn" id="btn-player-share" title="Do'stlarga ulashish"><i class="fa-regular fa-paper-plane"></i></button>
+            </div>
+
+            <!-- Center: Player Controls -->
+            <div class="player-center">
+                <div class="control-buttons">
+                    <button class="ctrl-btn" id="btn-shuffle" title="Aralashtirib ijro etish"><i class="fa-solid fa-shuffle"></i></button>
+                    <button class="ctrl-btn" id="btn-prev" title="Oldingi"><i class="fa-solid fa-backward-step"></i></button>
+                    <button class="play-pause-btn" id="btn-play-pause" title="Ijro / Pauza">
+                        <i class="fa-solid fa-play"></i>
+                    </button>
+                    <button class="ctrl-btn" id="btn-next" title="Keyingi"><i class="fa-solid fa-forward-step"></i></button>
+                    <button class="ctrl-btn" id="btn-repeat" title="Takrorlash"><i class="fa-solid fa-repeat"></i></button>
+                </div>
+                <div class="playback-bar">
+                    <span class="progress-time current-time" id="player-current-time">0:00</span>
+                    <div class="progress-slider-container">
+                        <input type="range" class="progress-slider" id="player-progress" min="0" max="100" value="0">
+                        <div class="progress-bar-fill" id="player-progress-fill"></div>
+                    </div>
+                    <span class="progress-time duration-time" id="player-duration">0:00</span>
+                </div>
+            </div>
+
+            <!-- Right: Extra Actions -->
+            <div class="player-right">
+                <button class="ctrl-btn" id="btn-toggle-queue" title="Ijro navbati"><i class="fa-solid fa-list-ul"></i></button>
+                <div class="volume-container">
+                    <button class="ctrl-btn" id="btn-mute" title="Ovozni o'chirish"><i class="fa-solid fa-volume-high"></i></button>
+                    <div class="volume-slider-container">
+                        <input type="range" class="volume-slider" id="player-volume" min="0" max="100" value="80">
+                        <div class="volume-bar-fill" id="player-volume-fill"></div>
+                    </div>
+                </div>
+                <button class="ctrl-btn" id="btn-toggle-fullscreen" title="To'liq ekran"><i class="fa-solid fa-expand"></i></button>
+            </div>
+        </footer class="player-bar">
+    </div>
+
+    <!-- Fullscreen / Expanded Player View Modal -->
+    <div class="expanded-player-modal hidden" id="expanded-player-view">
+        <div class="expanded-player-header">
+            <span class="now-playing-label">Now Playing</span>
+            <div class="expanded-header-actions">
+                <button class="expanded-icon-btn" id="btn-close-expanded" title="Yopish"><i class="fa-solid fa-chevron-down"></i></button>
+            </div>
+        </div>
+        
+        <div class="expanded-player-content">
+            <div class="expanded-left-panel">
+                <div class="expanded-album-art">
+                    <img id="expanded-song-img" src="" alt="Album Art">
+                </div>
+            </div>
+            
+            <div class="expanded-right-panel">
+                <div class="expanded-song-details">
+                    <h1 id="expanded-song-title">Qo'shiq nomi</h1>
+                    <h3 id="expanded-song-artist">Artist nomi</h3>
+                </div>
+
+                <div class="expanded-sub-sections">
+                    <!-- Credits Card -->
+                    <div class="expanded-card credits-card">
+                        <div class="card-header">
+                            <h3>Credits</h3>
+                            <button class="card-action-btn">Show all</button>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Main Artist:</strong> <span id="expanded-credit-artist">-</span></p>
+                            <p><strong>Writers:</strong> <span id="expanded-credit-writers">-</span></p>
+                            <p><strong>Producers:</strong> <span id="expanded-credit-producers">-</span></p>
+                        </div>
+                    </div>
+
+                    <!-- Next in Queue Card -->
+                    <div class="expanded-card queue-card">
+                        <div class="card-header">
+                            <h3>Next in queue</h3>
+                            <button class="card-action-btn" id="expanded-btn-open-queue">Open queue</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="queue-item-preview">
+                                <i class="fa-solid fa-music"></i>
+                                <div class="queue-meta">
+                                    <span class="queue-title" id="expanded-queue-next-title">Navbatda musiqa yo'q</span>
+                                    <span class="queue-artist" id="expanded-queue-next-artist">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Expanded controls mirroring the main player bar -->
+        <div class="expanded-player-footer">
+            <div class="playback-bar expanded-playback-bar">
+                <span class="progress-time current-time" id="expanded-current-time">0:00</span>
+                <div class="progress-slider-container">
+                    <input type="range" class="progress-slider" id="expanded-progress" min="0" max="100" value="0">
+                    <div class="progress-bar-fill" id="expanded-progress-fill"></div>
+                </div>
+                <span class="progress-time duration-time" id="expanded-duration">0:00</span>
+            </div>
+            
+            <div class="expanded-control-buttons">
+                <button class="ctrl-btn" id="expanded-btn-shuffle"><i class="fa-solid fa-shuffle"></i></button>
+                <button class="ctrl-btn" id="expanded-btn-prev"><i class="fa-solid fa-backward-step"></i></button>
+                <button class="play-pause-btn big-play-btn" id="expanded-btn-play-pause">
+                    <i class="fa-solid fa-play"></i>
+                </button>
+                <button class="ctrl-btn" id="expanded-btn-next"><i class="fa-solid fa-forward-step"></i></button>
+                <button class="ctrl-btn" id="expanded-btn-repeat"><i class="fa-solid fa-repeat"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals Overlay -->
+    <div class="modal-overlay hidden" id="modal-overlay"></div>
+
+    <!-- Authentication Modal (Sign Up / Log In) -->
+    <div class="auth-modal hidden" id="auth-modal">
+        <button class="modal-close-btn" id="btn-close-auth-modal"><i class="fa-solid fa-xmark"></i></button>
+        <div class="auth-modal-logo">
+            <i class="fa-solid fa-wind"></i>
+            <span>VibeStream</span>
+        </div>
+        
+        <h2 id="auth-modal-title">Sign up to start listening</h2>
+
+        <!-- Step 1: Email Form -->
+        <div class="auth-step active" id="auth-step-email">
+            <div class="input-group">
+                <label for="auth-email">Email address</label>
+                <input type="email" id="auth-email" placeholder="name@domain.com">
+                <span class="error-msg hidden" id="email-error">Iltimos, to'g'ri email kiriting!</span>
+            </div>
+            
+            <button class="auth-next-btn" id="btn-auth-email-next">Next</button>
+            
+            <div class="auth-divider">
+                <span>or</span>
+            </div>
+
+            <!-- Real Google Sign-In Button Container -->
+            <div id="google-signin-btn-container" style="display: flex; justify-content: center; margin-top: 12px; min-height: 40px;"></div>
+            <!-- Fallback Mock Google Button when not running on Server/Localhost -->
+            <button class="social-auth-btn" id="btn-auth-google" style="margin-top: 8px;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google Logo">
+                <span id="google-auth-text">Sign up with Google (Mock)</span>
+            </button>
+        </div>
+
+        <!-- Step 2: Verification Code (OTP) -->
+        <div class="auth-step hidden" id="auth-step-otp">
+            <p class="auth-description">Biz siz kiritgan emailga tasdiqlash kodini yubordik. Davom etish uchun kodni kiriting.</p>
+            <div class="input-group">
+                <label for="auth-otp">Tasdiqlash kodi</label>
+                <input type="text" id="auth-otp" placeholder="123456" maxlength="6">
+                <span class="error-msg hidden" id="otp-error">Noto'g'ri tasdiqlash kodi!</span>
+            </div>
+            <button class="auth-next-btn" id="btn-auth-otp-verify">Verify</button>
+            <button class="text-link-btn" id="btn-auth-resend-otp">Kodni qayta yuborish</button>
+        </div>
+
+        <!-- Step 3: Choose Username (Only for Sign Up) -->
+        <div class="auth-step hidden" id="auth-step-username">
+            <p class="auth-description">Muvaffaqiyatli tasdiqlandi! Endi o'zingizga foydalanuvchi nomi (username) tanlang.</p>
+            <div class="input-group">
+                <label for="auth-username">Foydalanuvchi nomi</label>
+                <input type="text" id="auth-username" placeholder="Azamatismoilov">
+                <span class="error-msg hidden" id="username-error">Bu username band yoki yaroqsiz!</span>
+            </div>
+            <button class="auth-next-btn" id="btn-auth-username-save">Ro'yxatdan o'tishni yakunlash</button>
+        </div>
+
+        <div class="auth-modal-footer">
+            <span id="auth-footer-prompt">Already have an account?</span>
+            <button class="auth-toggle-link" id="btn-toggle-auth-mode">Log in</button>
+        </div>
+    </div>
+
+    <!-- Rename Playlist Modal -->
+    <div class="rename-playlist-modal hidden" id="rename-playlist-modal">
+        <h3>Playlist nomini o'zgartirish</h3>
+        <div class="input-group">
+            <label for="input-playlist-rename">Yangi nom</label>
+            <input type="text" id="input-playlist-rename" placeholder="My Playlist #1">
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" id="btn-cancel-rename">Bekor qilish</button>
+            <button class="btn-save" id="btn-save-rename">Saqlash</button>
+        </div>
+    </div>
+
+    <!-- Share Song Modal (direct messaging to friends) -->
+    <div class="share-song-modal hidden" id="share-song-modal">
+        <div class="share-header">
+            <h3>Qo'shiqni ulashish</h3>
+            <button class="close-share" id="btn-close-share"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="share-song-info">
+            <img id="share-song-cover" src="" alt="Cover">
+            <div class="share-song-meta">
+                <h4 id="share-song-title">Qo'shiq nomi</h4>
+                <p id="share-song-artist">Artist</p>
+            </div>
+        </div>
+        <div class="share-friends-list scrollbar-custom" id="share-friends-list-container">
+            <!-- Friends list with Send button -->
+        </div>
+    </div>
+
+    <!-- Notification Toast System -->
+    <div class="notification-toast-container" id="notification-container">
+        <!-- Dynamic Toast Messages (OTP code, Alerts etc.) -->
+    </div>
+
+    <!-- HTML5 Audio Element -->
+    <audio id="main-audio-element" preload="auto"></audio>
+
+    <!-- App JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>
