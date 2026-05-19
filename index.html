@@ -495,54 +495,39 @@
         
         <h2 id="auth-modal-title">Sign up to start listening</h2>
 
-        <!-- Step 1: Email Form -->
-        <div class="auth-step active" id="auth-step-email">
+        <!-- Sign Up Form Container -->
+        <div class="auth-step active" id="auth-container-signup">
             <div class="input-group">
-                <label for="auth-email">Email address</label>
-                <input type="email" id="auth-email" placeholder="name@domain.com">
-                <span class="error-msg hidden" id="email-error">Iltimos, to'g'ri email kiriting!</span>
+                <label for="signup-email">Email address</label>
+                <input type="email" id="signup-email" placeholder="name@domain.com">
+                <span class="error-msg hidden" id="signup-email-error">Iltimos, to'g'ri email kiriting!</span>
             </div>
-            
-            <button class="auth-next-btn" id="btn-auth-email-next">Next</button>
-            
-            <div class="auth-divider">
-                <span>or</span>
+            <div class="input-group">
+                <label for="signup-username">Username</label>
+                <input type="text" id="signup-username" placeholder="Azamat123">
+                <span class="error-msg hidden" id="signup-username-error">Bu username band yoki yaroqsiz!</span>
             </div>
-
-            <!-- Real Google Sign-In Button Container -->
-            <div id="google-signin-btn-container" style="display: flex; justify-content: center; margin-top: 12px; min-height: 40px;"></div>
-            <!-- Fallback Mock Google Button when not running on Server/Localhost -->
-            <button class="social-auth-btn" id="btn-auth-google" style="margin-top: 8px;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google Logo">
-                <span id="google-auth-text">Sign up with Google (Mock)</span>
-            </button>
+            <div class="input-group">
+                <label for="signup-password">Password</label>
+                <input type="password" id="signup-password" placeholder="••••••••">
+                <span class="error-msg hidden" id="signup-password-error">Iltimos, parolni kiriting!</span>
+            </div>
+            <button class="auth-next-btn" id="btn-submit-signup" style="margin-top: 12px;">Sign Up</button>
         </div>
 
-        <!-- Step 2: Verification Code (OTP) -->
-        <div class="auth-step hidden" id="auth-step-otp">
-            <p class="auth-description">Biz siz kiritgan emailga tasdiqlash kodini yubordik. Davom etish uchun kodni kiriting.</p>
+        <!-- Log In Form Container -->
+        <div class="auth-step hidden" id="auth-container-login">
             <div class="input-group">
-                <label for="auth-otp">Tasdiqlash kodi</label>
-                <input type="text" id="auth-otp" placeholder="123456" maxlength="6">
-                <span class="error-msg hidden" id="otp-error">Noto'g'ri tasdiqlash kodi!</span>
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" placeholder="Azamat123">
+                <span class="error-msg hidden" id="login-username-error">Username topilmadi!</span>
             </div>
-            <button class="auth-next-btn" id="btn-auth-otp-verify">Verify</button>
-            <button class="text-link-btn" id="btn-auth-resend-otp" style="margin-top: 8px;">Kodni qayta yuborish</button>
-            <div style="margin: 10px 0; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); line-height: 0.1em;"><span style="background: var(--background-elevated-base); padding: 0 10px; color: var(--text-grey); font-size: 11px;">yoki</span></div>
-            <button class="social-auth-btn" id="btn-auth-otp-bypass" style="margin-top: 8px; background: rgba(29, 185, 84, 0.1); border: 1px solid var(--spotify-green); color: #fff;">
-                <i class="fa-solid fa-circle-check" style="color: var(--spotify-green); margin-right: 8px;"></i> Kodsiz ro'yxatdan o'tish (Bypass OTP)
-            </button>
-        </div>
-
-        <!-- Step 3: Choose Username (Only for Sign Up) -->
-        <div class="auth-step hidden" id="auth-step-username">
-            <p class="auth-description">Muvaffaqiyatli tasdiqlandi! Endi o'zingizga foydalanuvchi nomi (username) tanlang.</p>
             <div class="input-group">
-                <label for="auth-username">Foydalanuvchi nomi</label>
-                <input type="text" id="auth-username" placeholder="Azamatismoilov">
-                <span class="error-msg hidden" id="username-error">Bu username band yoki yaroqsiz!</span>
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" placeholder="••••••••">
+                <span class="error-msg hidden" id="login-password-error">Noto'g'ri parol!</span>
             </div>
-            <button class="auth-next-btn" id="btn-auth-username-save">Ro'yxatdan o'tishni yakunlash</button>
+            <button class="auth-next-btn" id="btn-submit-login" style="margin-top: 12px;">Log In</button>
         </div>
 
         <div class="auth-modal-footer">

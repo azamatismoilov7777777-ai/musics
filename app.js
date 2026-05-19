@@ -2,52 +2,7 @@
    VibeStream JavaScript Application Logic - Real Music Integration (iTunes Search API)
    ========================================================================== */
 
-// --- CONFIGURATION FOR REAL AUTHENTICATION ---
-const AUTH_CONFIG = {
-    // To enable real Google Sign-In, set your Google Client ID here and run via localhost (e.g. http://localhost:8080)
-    googleClientId: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-};
-
-// --- DYNAMIC EMAIL SENDER VIA FORMSUBMIT (NO SIGNUP REQUIRED) ---
-function sendOtpEmail(email, otp) {
-    if (window.location.protocol === "file:") {
-        console.warn("Real emails cannot be sent from file:// protocol due to FormSubmit security policy.");
-        showToast("Haqiqiy email yuborish uchun saytni serverda ishga tushiring (masalan, Vercel).", 8000);
-        showToast(`VibeStream OTP Tasdiqlash Kodi (Mock): ${otp}`, 15000);
-        return;
-    }
-
-    showToast("Tasdiqlash so'rovi yuborilmoqda...");
-
-    const formData = new FormData();
-    formData.append("_subject", "VibeStream - Kirish Ruxsatnomasi");
-    formData.append("OTP_Kod", otp);
-    formData.append("Xabar", `Sizning VibeStream uchun kirish ruxsatnomangiz. Iltimos, pastdagi 'Activate Form' (Roziman) tugmasini bosing, so'ngra saytga qaytib 'Kodsiz ro'yxatdan o'tish' tugmasini bosing.`);
-
-    fetch(`https://formsubmit.co/ajax/${email}`, {
-        method: "POST",
-        headers: {
-            "Accept": "application/json"
-        },
-        body: formData
-    })
-    .then(res => {
-        // Parse JSON even if status is 400 (first-time activation state)
-        return res.json().catch(() => ({}));
-    })
-    .then(data => {
-        if (data.message && data.message.includes("activate")) {
-            showToast("Gmail-ingizga ruxsatnoma xati yuborildi! Uni ochib, 'Activate Form' (Roziman) tugmasini bosing.", 12000);
-        } else {
-            showToast("Tasdiqlash kodi emailingizga yuborildi! (Spam bo'limini ham tekshiring).", 10000);
-        }
-    })
-    .catch(err => {
-        console.warn("FormSubmit Network/CORS status:", err);
-        // Fallback info toast in case of network block
-        showToast("Ruxsatnoma yuborildi! Gmailingizni tekshiring (Spam bo'limini ham).", 10000);
-    });
-}
+// --- 1. DYNAMIC CATEGORIES & POPULAR ARTISTS ---
 
 // --- JSONP HELPER FOR CORS-BYPASS TO ITUNES ---
 function fetchJsonp(url, callbackName) {
@@ -141,10 +96,10 @@ const MOCK_ARTISTS = [
 let state = {
     currentUser: null, // { username: string, email: string }
     registeredUsers: [
-        { email: "azamat@gmail.com", username: "Azamatismoilov" },
-        { email: "murod@gmail.com", username: "Murodbek" },
-        { email: "shahzod@gmail.com", username: "Shahzod" },
-        { email: "malika@gmail.com", username: "Malika" }
+        { email: "azamat@gmail.com", username: "Azamatismoilov", password: "1234" },
+        { email: "murod@gmail.com", username: "Murodbek", password: "1234" },
+        { email: "shahzod@gmail.com", username: "Shahzod", password: "1234" },
+        { email: "malika@gmail.com", username: "Malika", password: "1234" }
     ],
     playlists: [], // { id, name, owner, songs: [] }
     friends: [
@@ -323,25 +278,22 @@ const el = {
     btnOpenSignup: document.getElementById("btn-open-signup"),
     btnOpenLogin: document.getElementById("btn-open-login"),
     
-    authStepEmail: document.getElementById("auth-step-email"),
-    authStepOtp: document.getElementById("auth-step-otp"),
-    authStepUsername: document.getElementById("auth-step-username"),
+    authContainerSignup: document.getElementById("auth-container-signup"),
+    authContainerLogin: document.getElementById("auth-container-login"),
     
-    authEmailInput: document.getElementById("auth-email"),
-    emailError: document.getElementById("email-error"),
-    btnAuthEmailNext: document.getElementById("btn-auth-email-next"),
-    btnAuthGoogle: document.getElementById("btn-auth-google"),
-    googleAuthText: document.getElementById("google-auth-text"),
+    signupEmailInput: document.getElementById("signup-email"),
+    signupEmailError: document.getElementById("signup-email-error"),
+    signupUsernameInput: document.getElementById("signup-username"),
+    signupUsernameError: document.getElementById("signup-username-error"),
+    signupPasswordInput: document.getElementById("signup-password"),
+    signupPasswordError: document.getElementById("signup-password-error"),
+    btnSubmitSignup: document.getElementById("btn-submit-signup"),
     
-    authOtpInput: document.getElementById("auth-otp"),
-    otpError: document.getElementById("otp-error"),
-    btnAuthOtpVerify: document.getElementById("btn-auth-otp-verify"),
-    btnAuthResendOtp: document.getElementById("btn-auth-resend-otp"),
-    btnAuthOtpBypass: document.getElementById("btn-auth-otp-bypass"),
-    
-    authUsernameInput: document.getElementById("auth-username"),
-    usernameError: document.getElementById("username-error"),
-    btnAuthUsernameSave: document.getElementById("btn-auth-username-save"),
+    loginUsernameInput: document.getElementById("login-username"),
+    loginUsernameError: document.getElementById("login-username-error"),
+    loginPasswordInput: document.getElementById("login-password"),
+    loginPasswordError: document.getElementById("login-password-error"),
+    btnSubmitLogin: document.getElementById("btn-submit-login"),
     
     authFooterPrompt: document.getElementById("auth-footer-prompt"),
     btnToggleAuthMode: document.getElementById("btn-toggle-auth-mode"),
@@ -383,12 +335,14 @@ function saveToLocalStorage() {
     localStorage.setItem("vibestream_playlist_counter", state.playlistCounter);
     if (state.currentUser) {
         localStorage.setItem("vibestream_current_user", JSON.stringify(state.currentUser));
+        // Async sync user profile data to kvdb
+        syncCurrentUserToServer();
     } else {
         localStorage.removeItem("vibestream_current_user");
     }
 }
 
-function loadFromLocalStorage() {
+async function loadFromLocalStorage() {
     const registered = localStorage.getItem("vibestream_registered_users");
     if (registered) state.registeredUsers = JSON.parse(registered);
 
@@ -405,6 +359,20 @@ function loadFromLocalStorage() {
     if (user) {
         state.currentUser = JSON.parse(user);
         updateAuthUI();
+        
+        // Asynchronously refresh user profile from server to keep synced
+        try {
+            const userData = await kvdbGet(`user_${state.currentUser.username.toLowerCase()}`);
+            if (userData && userData.password === state.currentUser.password) {
+                state.playlists = userData.playlists || [];
+                state.friends = userData.friends || [];
+                saveToLocalStorage();
+                renderSidebarPlaylists();
+                renderFriendsList();
+            }
+        } catch (e) {
+            console.warn("Could not sync user data from server on startup:", e);
+        }
     }
 }
 
@@ -432,6 +400,12 @@ function navigateTo(viewName) {
     } else if (viewName === "chat") {
         el.viewChat.classList.remove("hidden");
         renderChatView();
+    }
+
+    if (viewName === "chat") {
+        startChatPolling();
+    } else {
+        stopChatPolling();
     }
 
     state.activeView = viewName;
@@ -489,6 +463,13 @@ function navigateToViewDirect(viewName) {
         el.viewChat.classList.remove("hidden");
         renderChatView();
     }
+
+    if (viewName === "chat") {
+        startChatPolling();
+    } else {
+        stopChatPolling();
+    }
+
     state.activeView = viewName;
     updateNavButtons();
 }
@@ -652,6 +633,49 @@ function renderShelfList(container, songs) {
 
 
 // --- 10. AUTHENTICATION MODULE ---
+const KVDB_BUCKET = "vibestream_db_v3";
+const KVDB_BASE = `https://kvdb.io/${KVDB_BUCKET}`;
+
+// Helper: PUT to KVDB
+async function kvdbPut(key, data) {
+    try {
+        const response = await fetch(`${KVDB_BASE}/${key}`, {
+            method: "POST", // POST acts as upsert on kvdb.io
+            body: JSON.stringify(data)
+        });
+        return response.ok;
+    } catch (e) {
+        console.error("KVDB Put Error:", e);
+        return false;
+    }
+}
+
+// Helper: GET from KVDB
+async function kvdbGet(key) {
+    try {
+        const response = await fetch(`${KVDB_BASE}/${key}`);
+        if (!response.ok) return null;
+        const text = await response.text();
+        return JSON.parse(text);
+    } catch (e) {
+        console.error("KVDB Get Error:", e);
+        return null;
+    }
+}
+
+// Helper: Sync current user's profile to server
+async function syncCurrentUserToServer() {
+    if (!state.currentUser) return;
+    const userData = {
+        email: state.currentUser.email,
+        username: state.currentUser.username,
+        password: state.currentUser.password,
+        playlists: state.playlists,
+        friends: state.friends
+    };
+    await kvdbPut(`user_${state.currentUser.username.toLowerCase()}`, userData);
+}
+
 function updateAuthUI() {
     if (state.currentUser) {
         el.authLoggedOut.classList.add("hidden");
@@ -670,25 +694,32 @@ function openAuthModal(mode = "signup") {
     el.authModal.classList.remove("hidden");
     el.modalOverlay.classList.remove("hidden");
     
-    el.authStepEmail.classList.remove("hidden");
-    el.authStepOtp.classList.add("hidden");
-    el.authStepUsername.classList.add("hidden");
+    // Hide both containers initially
+    el.authContainerSignup.classList.add("hidden");
+    el.authContainerLogin.classList.add("hidden");
     
-    el.authEmailInput.value = "";
-    el.authOtpInput.value = "";
-    el.authUsernameInput.value = "";
-    el.emailError.classList.add("hidden");
-    el.otpError.classList.add("hidden");
-    el.usernameError.classList.add("hidden");
+    // Hide error messages
+    el.signupEmailError.classList.add("hidden");
+    el.signupUsernameError.classList.add("hidden");
+    el.signupPasswordError.classList.add("hidden");
+    el.loginUsernameError.classList.add("hidden");
+    el.loginPasswordError.classList.add("hidden");
+    
+    // Clear values
+    el.signupEmailInput.value = "";
+    el.signupUsernameInput.value = "";
+    el.signupPasswordInput.value = "";
+    el.loginUsernameInput.value = "";
+    el.loginPasswordInput.value = "";
 
     if (mode === "signup") {
         el.authModalTitle.textContent = "Sign up to start listening";
-        el.googleAuthText.textContent = "Sign up with Google";
+        el.authContainerSignup.classList.remove("hidden");
         el.authFooterPrompt.textContent = "Already have an account?";
         el.btnToggleAuthMode.textContent = "Log in";
     } else {
         el.authModalTitle.textContent = "Log in to VibeStream";
-        el.googleAuthText.textContent = "Log in with Google";
+        el.authContainerLogin.classList.remove("hidden");
         el.authFooterPrompt.textContent = "Don't have an account?";
         el.btnToggleAuthMode.textContent = "Sign up";
     }
@@ -716,127 +747,209 @@ el.btnToggleAuthMode.addEventListener("click", () => {
     }
 });
 
-el.btnAuthEmailNext.addEventListener("click", () => {
-    const email = el.authEmailInput.value.trim();
+el.btnSubmitSignup.addEventListener("click", async () => {
+    const email = el.signupEmailInput.value.trim();
+    const username = el.signupUsernameInput.value.trim();
+    const password = el.signupPasswordInput.value.trim();
+    
+    let hasError = false;
+    
     if (!email || !email.includes("@")) {
-        el.emailError.textContent = "Iltimos, to'g'ri email kiriting!";
-        el.emailError.classList.remove("hidden");
-        return;
-    }
-    el.emailError.classList.add("hidden");
-
-    const userExists = state.registeredUsers.some(u => u.email.toLowerCase() === email.toLowerCase());
-
-    if (state.authMode === "signup" && userExists) {
-        el.emailError.innerHTML = `Sizning akkauntingiz bor ekan, <button class="text-link-btn" onclick="openAuthModal('login')">login</button> tugmasini bosing.`;
-        el.emailError.classList.remove("hidden");
-        return;
-    } else if (state.authMode === "login" && !userExists) {
-        el.emailError.textContent = "Bunday email topilmadi. Avval ro'yxatdan o'ting!";
-        el.emailError.classList.remove("hidden");
-        return;
-    }
-
-    state.authTempEmail = email;
-    state.authGeneratedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Send real OTP email using FormSubmit
-    sendOtpEmail(email, state.authGeneratedOtp);
-    
-    el.authStepEmail.classList.add("hidden");
-    el.authStepOtp.classList.remove("hidden");
-});
-
-el.btnAuthOtpVerify.addEventListener("click", () => {
-    const otpInput = el.authOtpInput.value.trim();
-    if (otpInput !== state.authGeneratedOtp) {
-        el.otpError.classList.remove("hidden");
-        return;
-    }
-    el.otpError.classList.add("hidden");
-
-    if (state.authMode === "signup") {
-        el.authStepOtp.classList.add("hidden");
-        el.authStepUsername.classList.remove("hidden");
+        el.signupEmailError.textContent = "Iltimos, to'g'ri email kiriting!";
+        el.signupEmailError.classList.remove("hidden");
+        hasError = true;
     } else {
-        const user = state.registeredUsers.find(u => u.email.toLowerCase() === state.authTempEmail.toLowerCase());
-        state.currentUser = user;
-        saveToLocalStorage();
-        updateAuthUI();
-        closeAuthModal();
-        showToast(`Xush kelibsiz, ${user.username}!`);
+        el.signupEmailError.classList.add("hidden");
     }
-});
-
-el.btnAuthResendOtp.addEventListener("click", () => {
-    state.authGeneratedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // Send real OTP email using FormSubmit
-    sendOtpEmail(state.authTempEmail, state.authGeneratedOtp);
+    if (!username || username.length < 3) {
+        el.signupUsernameError.textContent = "Username kamida 3 ta belgidan iborat bo'lsin!";
+        el.signupUsernameError.classList.remove("hidden");
+        hasError = true;
+    } else {
+        el.signupUsernameError.classList.add("hidden");
+    }
+    
+    if (!password || password.length < 4) {
+        el.signupPasswordError.textContent = "Parol kamida 4 ta belgidan iborat bo'lsin!";
+        el.signupPasswordError.classList.remove("hidden");
+        hasError = true;
+    } else {
+        el.signupPasswordError.classList.add("hidden");
+    }
+    
+    if (hasError) return;
+    
+    // 1. Local uniqueness check first
+    const localExists = state.registeredUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
+    if (localExists) {
+        el.signupUsernameError.textContent = "Bu username band, boshqasini tanlang!";
+        el.signupUsernameError.classList.remove("hidden");
+        return;
+    }
+    
+    showToast("Tekshirilmoqda...");
+    
+    // 2. Optional cloud uniqueness check
+    try {
+        const existingUser = await kvdbGet(`user_${username.toLowerCase()}`);
+        if (existingUser) {
+            el.signupUsernameError.textContent = "Bu username band, boshqasini tanlang!";
+            el.signupUsernameError.classList.remove("hidden");
+            return;
+        }
+    } catch (err) {
+        console.warn("KVDB user check failed, falling back to local database:", err);
+    }
+    
+    showToast("Ro'yxatdan o'tkazilmoqda...");
+    
+    const newUser = {
+        email: email,
+        username: username,
+        password: password,
+        playlists: [],
+        friends: []
+    };
+    
+    // Add user locally first so that the user can immediately log in next time
+    if (!state.registeredUsers.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        state.registeredUsers.push(newUser);
+    }
+    
+    state.currentUser = { email, username, password };
+    state.playlists = [];
+    state.friends = [];
+    
+    // Save locally and update UI instantly
+    saveToLocalStorage();
+    updateAuthUI();
+    closeAuthModal();
+    
+    renderSidebarPlaylists();
+    renderFriendsList();
+    navigateTo("home");
+    
+    showToast(`Akkaunt yaratildi! Xush kelibsiz, ${username}!`);
+    
+    // Try background upload to server, if it fails, it's fine since we saved locally
+    kvdbPut(`user_${username.toLowerCase()}`, newUser).catch(err => {
+        console.warn("KVDB upload failed in background:", err);
+    });
 });
 
-el.btnAuthOtpBypass.addEventListener("click", () => {
-    if (state.authMode === "signup") {
-        el.authStepOtp.classList.add("hidden");
-        el.authStepUsername.classList.remove("hidden");
-        showToast("Tasdiqlash o'tkazib yuborildi. Username tanlang.");
+el.btnSubmitLogin.addEventListener("click", async () => {
+    const username = el.loginUsernameInput.value.trim();
+    const password = el.loginPasswordInput.value.trim();
+    
+    let hasError = false;
+    if (!username) {
+        el.loginUsernameError.textContent = "Username kiriting!";
+        el.loginUsernameError.classList.remove("hidden");
+        hasError = true;
     } else {
-        const user = state.registeredUsers.find(u => u.email.toLowerCase() === state.authTempEmail.toLowerCase());
-        if (user) {
-            state.currentUser = user;
+        el.loginUsernameError.classList.add("hidden");
+    }
+    
+    if (!password) {
+        el.loginPasswordError.textContent = "Parol kiriting!";
+        el.loginPasswordError.classList.remove("hidden");
+        hasError = true;
+    } else {
+        el.loginPasswordError.classList.add("hidden");
+    }
+    
+    if (hasError) return;
+    
+    showToast("Kirilmoqda...");
+    
+    // 1. Local storage verification (works offline or immediately)
+    const localUser = state.registeredUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
+    if (localUser) {
+        if (localUser.password === password) {
+            state.currentUser = {
+                email: localUser.email,
+                username: localUser.username,
+                password: localUser.password
+            };
+            state.playlists = localUser.playlists || [];
+            state.friends = localUser.friends || [];
+            
             saveToLocalStorage();
             updateAuthUI();
             closeAuthModal();
-            showToast(`Muvaffaqiyatli kirdingiz (Kodsiz)! Xush kelibsiz, ${user.username}!`);
+            
+            renderSidebarPlaylists();
+            renderFriendsList();
+            navigateTo("home");
+            showToast(`Xush kelibsiz, ${localUser.username}!`);
+            
+            // Sync with server in background to get latest playlists/friends if online
+            kvdbGet(`user_${username.toLowerCase()}`).then(userData => {
+                if (userData && userData.password === password) {
+                    state.playlists = userData.playlists || [];
+                    state.friends = userData.friends || [];
+                    saveToLocalStorage();
+                    renderSidebarPlaylists();
+                    renderFriendsList();
+                }
+            }).catch(e => console.warn("KVDB sync failed on login background:", e));
+            
+            return;
         } else {
-            showToast("Xato: Avval ro'yxatdan o'tishingiz lozim.");
-            openAuthModal("signup");
+            el.loginPasswordError.textContent = "Noto'g'ri parol!";
+            el.loginPasswordError.classList.remove("hidden");
+            return;
         }
     }
-});
-
-el.btnAuthUsernameSave.addEventListener("click", () => {
-    const username = el.authUsernameInput.value.trim();
-    if (!username || username.length < 3) {
-        el.usernameError.textContent = "Username kamida 3 ta belgidan iborat bo'lsin!";
-        el.usernameError.classList.remove("hidden");
-        return;
-    }
     
-    const usernameTaken = state.registeredUsers.some(u => u.username.toLowerCase() === username.toLowerCase());
-    if (usernameTaken) {
-        el.usernameError.textContent = "Bu username band, boshqasini tanlang!";
-        el.usernameError.classList.remove("hidden");
-        return;
+    // 2. Cloud database fallback (in case they signed up on another device)
+    try {
+        const userData = await kvdbGet(`user_${username.toLowerCase()}`);
+        if (!userData) {
+            el.loginUsernameError.textContent = "Bunday foydalanuvchi topilmadi!";
+            el.loginUsernameError.classList.remove("hidden");
+            return;
+        }
+        
+        if (userData.password !== password) {
+            el.loginPasswordError.textContent = "Noto'g'ri parol!";
+            el.loginPasswordError.classList.remove("hidden");
+            return;
+        }
+        
+        state.currentUser = {
+            email: userData.email,
+            username: userData.username,
+            password: userData.password
+        };
+        state.playlists = userData.playlists || [];
+        state.friends = userData.friends || [];
+        
+        // Add to local database
+        if (!state.registeredUsers.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+            state.registeredUsers.push({
+                email: userData.email,
+                username: userData.username,
+                password: userData.password,
+                playlists: userData.playlists || [],
+                friends: userData.friends || []
+            });
+        }
+        
+        saveToLocalStorage();
+        updateAuthUI();
+        closeAuthModal();
+        
+        renderSidebarPlaylists();
+        renderFriendsList();
+        navigateTo("home");
+        showToast(`Xush kelibsiz, ${userData.username}!`);
+    } catch (err) {
+        console.error("Login error:", err);
+        el.loginUsernameError.textContent = "Bunday foydalanuvchi topilmadi (tarmoq xatosi)!";
+        el.loginUsernameError.classList.remove("hidden");
     }
-
-    const newUser = { email: state.authTempEmail, username: username };
-    state.registeredUsers.push(newUser);
-    state.currentUser = newUser;
-    
-    saveToLocalStorage();
-    updateAuthUI();
-    closeAuthModal();
-    showToast(`Akkaunt yaratildi! Xush kelibsiz, ${username}!`);
-});
-
-el.btnAuthGoogle.addEventListener("click", () => {
-    // Mock login fallback if client-side Google OAuth isn't initialized/run on server
-    const randomId = Math.floor(Math.random() * 9000);
-    const googleUser = {
-        email: `google_user_${randomId}@gmail.com`,
-        username: `GoogleUser_${randomId}`,
-        avatar: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150&auto=format&fit=crop`
-    };
-    
-    if (!state.registeredUsers.some(u => u.email.toLowerCase() === googleUser.email.toLowerCase())) {
-        state.registeredUsers.push(googleUser);
-    }
-    state.currentUser = googleUser;
-    saveToLocalStorage();
-    updateAuthUI();
-    closeAuthModal();
-    showToast(`Google orqali kirdingiz (Mock)! Xush kelibsiz, ${googleUser.username}!`);
 });
 
 el.btnUserMenu.addEventListener("click", (e) => {
@@ -850,8 +963,12 @@ document.addEventListener("click", () => {
 
 el.btnLogout.addEventListener("click", () => {
     state.currentUser = null;
+    state.playlists = [];
+    state.friends = [];
     saveToLocalStorage();
     updateAuthUI();
+    renderSidebarPlaylists();
+    renderFriendsList();
     navigateTo("home");
     showToast("Tizimdan chiqdingiz.");
 });
@@ -1529,8 +1646,127 @@ el.btnPlayerAddPlaylist.addEventListener("click", () => {
 
 
 // --- 15. FRIENDS & DIRECT MESSAGING SYSTEM ---
+let chatPollInterval = null;
+
+async function syncChatWithServer() {
+    if (!state.activeChatFriend || !state.currentUser) return;
+    const chatKey = `chat_${[state.currentUser.username.toLowerCase(), state.activeChatFriend.username.toLowerCase()].sort().join("_")}`;
+    const serverChat = await kvdbGet(chatKey);
+    if (serverChat) {
+        if (JSON.stringify(state.activeChatFriend.chatHistory) !== JSON.stringify(serverChat)) {
+            state.activeChatFriend.chatHistory = serverChat;
+            renderChatMessages();
+        }
+    }
+}
+
+function startChatPolling() {
+    stopChatPolling();
+    syncChatWithServer();
+    chatPollInterval = setInterval(syncChatWithServer, 3000); // Poll every 3 seconds
+}
+
+function stopChatPolling() {
+    if (chatPollInterval) {
+        clearInterval(chatPollInterval);
+        chatPollInterval = null;
+    }
+}
+
+async function notifyRecipient(recipientUsername) {
+    if (!state.currentUser) return;
+    const myName = state.currentUser.username;
+    const inboxKey = `inbox_${recipientUsername.toLowerCase()}`;
+    try {
+        const inbox = await kvdbGet(inboxKey) || [];
+        if (!inbox.some(name => name.toLowerCase() === myName.toLowerCase())) {
+            inbox.push(myName);
+            await kvdbPut(inboxKey, inbox);
+        }
+    } catch (e) {
+        console.warn("Failed to notify recipient:", e);
+    }
+}
+
+async function pollInboxAndChats() {
+    if (!state.currentUser) return;
+    const myName = state.currentUser.username.toLowerCase();
+    
+    // 1. Poll inbox for new friends/interactions
+    try {
+        const inbox = await kvdbGet(`inbox_${myName}`);
+        if (inbox && Array.isArray(inbox)) {
+            let changed = false;
+            for (const sender of inbox) {
+                const alreadyFriend = state.friends.find(f => f.username.toLowerCase() === sender.toLowerCase());
+                if (!alreadyFriend) {
+                    let properName = sender;
+                    try {
+                        const profile = await kvdbGet(`user_${sender.toLowerCase()}`);
+                        if (profile && profile.username) {
+                            properName = profile.username;
+                        }
+                    } catch (e) {}
+                    
+                    state.friends.push({
+                        username: properName,
+                        chatHistory: []
+                    });
+                    changed = true;
+                    showToast(`"${properName}" sizni do'stlar ro'yxatiga qo'shdi!`);
+                }
+            }
+            if (changed) {
+                saveToLocalStorage();
+                renderFriendsList();
+            }
+        }
+    } catch (e) {
+        console.warn("Error polling inbox:", e);
+    }
+
+    // 2. Poll chats for all existing friends to receive new messages in real-time
+    for (let friend of state.friends) {
+        const chatKey = `chat_${[state.currentUser.username.toLowerCase(), friend.username.toLowerCase()].sort().join("_")}`;
+        try {
+            const serverChat = await kvdbGet(chatKey);
+            if (serverChat && Array.isArray(serverChat)) {
+                const localHistoryStr = JSON.stringify(friend.chatHistory || []);
+                const serverHistoryStr = JSON.stringify(serverChat);
+                if (localHistoryStr !== serverHistoryStr) {
+                    const oldLength = (friend.chatHistory || []).length;
+                    friend.chatHistory = serverChat;
+                    saveToLocalStorage();
+
+                    if (state.activeChatFriend && state.activeChatFriend.username.toLowerCase() === friend.username.toLowerCase()) {
+                        renderChatMessages();
+                    } else {
+                        const newMsgs = serverChat.slice(oldLength);
+                        for (const msg of newMsgs) {
+                            if (msg.sender.toLowerCase() !== state.currentUser.username.toLowerCase()) {
+                                if (msg.type === "text") {
+                                    showToast(`"${friend.username}": ${msg.content}`);
+                                } else if (msg.type === "song") {
+                                    showToast(`"${friend.username}" sizga musiqa yubordi!`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn(`Error polling chat with ${friend.username}:`, e);
+        }
+    }
+}
+
 function renderFriendsList() {
     if (!state.currentUser) return;
+    
+    if (state.friends.length === 0) {
+        el.friendsContainer.innerHTML = `<div class="sidebar-item" style="color: var(--text-grey); font-size:13px; cursor:default; justify-content:center;">Do'stlar ro'yxati bo'sh</div>`;
+        return;
+    }
     
     el.friendsContainer.innerHTML = state.friends.map(friend => `
         <div class="sidebar-item friend-item" data-friend-name="${friend.username}">
@@ -1539,9 +1775,8 @@ function renderFriendsList() {
             </div>
             <div class="item-meta">
                 <span class="item-title">${friend.username}</span>
-                <span class="item-subtitle">${friend.isOnline ? "online" : "offline"}</span>
+                <span class="item-subtitle">friend</span>
             </div>
-            <span class="friend-status ${friend.isOnline ? "online" : "offline"}"></span>
         </div>
     `).join('');
 
@@ -1568,43 +1803,68 @@ el.btnCloseFriendSearch.addEventListener("click", () => {
     el.friendSearchBox.classList.add("hidden");
 });
 
+let friendSearchDebounce = null;
 el.inputSearchFriend.addEventListener("input", (e) => {
-    const query = e.target.value.toLowerCase().trim();
+    const query = e.target.value.trim();
     if (query === "") {
         el.friendSearchResults.innerHTML = "";
         return;
     }
 
-    const matched = state.registeredUsers.filter(u => 
-        u.username.toLowerCase().includes(query) && 
-        u.username.toLowerCase() !== state.currentUser.username.toLowerCase() &&
-        !state.friends.some(f => f.username.toLowerCase() === u.username.toLowerCase())
-    );
+    if (friendSearchDebounce) clearTimeout(friendSearchDebounce);
 
-    if (matched.length === 0) {
-        el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">Topilmadi yoki allaqachon qo'shilgan</div>`;
-    } else {
-        el.friendSearchResults.innerHTML = matched.map(u => `
-            <div class="search-result-item">
-                <span class="search-result-name">${u.username}</span>
-                <button class="btn-add-friend-action" data-username="${u.username}"><i class="fa-solid fa-plus"></i></button>
-            </div>
-        `).join('');
+    friendSearchDebounce = setTimeout(async () => {
+        if (query.toLowerCase() === state.currentUser.username.toLowerCase()) {
+            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">O'zingizni do'st qilib qo'sha olmaysiz</div>`;
+            return;
+        }
 
-        document.querySelectorAll(".btn-add-friend-action").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const uname = btn.getAttribute("data-username");
-                addFriend(uname);
-            });
-        });
-    }
+        if (state.friends.some(f => f.username.toLowerCase() === query.toLowerCase())) {
+            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">Allaqachon do'stlar ro'yxatida</div>`;
+            return;
+        }
+
+        el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);"><i class="fa-solid fa-spinner fa-spin"></i> Qidirilmoqda...</div>`;
+
+        // 1. Local check
+        const localUser = state.registeredUsers.find(u => u.username.toLowerCase() === query.toLowerCase());
+        if (localUser) {
+            showSearchResult(localUser.username);
+            return;
+        }
+
+        // 2. Cloud check
+        try {
+            const userData = await kvdbGet(`user_${query.toLowerCase()}`);
+            if (userData && userData.username) {
+                showSearchResult(userData.username);
+            } else {
+                el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
+            }
+        } catch (err) {
+            console.error("Search friend error:", err);
+            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Bunday foydalanuvchi topilmadi (tarmoq xatosi)</div>`;
+        }
+    }, 600);
 });
 
+function showSearchResult(foundUsername) {
+    el.friendSearchResults.innerHTML = `
+        <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 4px; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <span class="search-result-name" style="color:#fff; font-size:13px;">${foundUsername}</span>
+            <button class="btn-add-friend-action" data-username="${foundUsername}" style="background:var(--spotify-green); border:none; color:#000; padding:2px 8px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:bold;"><i class="fa-solid fa-plus"></i> Qo'shish</button>
+        </div>
+    `;
+
+    const btn = el.friendSearchResults.querySelector(".btn-add-friend-action");
+    btn.addEventListener("click", () => {
+        addFriend(foundUsername);
+    });
+}
+
 function addFriend(username) {
-    const isOnline = Math.random() > 0.3;
     const newFriend = {
         username: username,
-        isOnline: isOnline,
         chatHistory: []
     };
     
@@ -1614,6 +1874,9 @@ function addFriend(username) {
     
     el.friendSearchBox.classList.add("hidden");
     showToast(`"${username}" do'stlar ro'yxatiga qo'shildi!`);
+    
+    // Notify the added user that they should also list us
+    notifyRecipient(username);
 }
 
 function renderChatView() {
@@ -1622,8 +1885,8 @@ function renderChatView() {
 
     el.chatFriendName.textContent = friend.username;
     const statusText = el.viewChat.querySelector(".chat-status");
-    statusText.textContent = friend.isOnline ? "online" : "offline";
-    statusText.className = `chat-status ${friend.isOnline ? "online" : "offline"}`;
+    statusText.textContent = "online";
+    statusText.className = "chat-status online";
 
     renderChatMessages();
 }
@@ -1632,7 +1895,7 @@ function renderChatMessages() {
     const friend = state.activeChatFriend;
     if (!friend) return;
 
-    if (friend.chatHistory.length === 0) {
+    if (!friend.chatHistory || friend.chatHistory.length === 0) {
         el.chatMessagesContainer.innerHTML = `<div style="text-align: center; color: var(--text-grey); font-size: 13px; margin-top: 48px;">Yozishmani boshlash uchun xabar yuboring yoki qo'shiq ulashing!</div>`;
         return;
     }
@@ -1659,7 +1922,8 @@ function renderChatMessages() {
                     </div>
                 `;
             } else {
-                contentHtml = `<div>Musiqa (O'chirilgan)</div>`;
+                contentHtml = `<div>Musiqa ulashildi (Yuklanmoqda...)</div>`;
+                fetchTracksFromItunesById(msg.songId);
             }
         }
 
@@ -1681,7 +1945,24 @@ function renderChatMessages() {
     el.chatMessagesContainer.scrollTop = el.chatMessagesContainer.scrollHeight;
 }
 
-function sendMessage() {
+async function fetchTracksFromItunesById(songId) {
+    if (state.songCache[songId]) return;
+    try {
+        const res = await fetch(`https://itunes.apple.com/lookup?id=${songId}`);
+        const data = await res.json();
+        if (data.results && data.results.length > 0) {
+            const track = mapItunesTrack(data.results[0]);
+            state.songCache[songId] = track;
+            if (state.activeView === "chat") {
+                renderChatMessages();
+            }
+        }
+    } catch (e) {
+        console.error("Fetch single track error:", e);
+    }
+}
+
+async function sendMessage() {
     const text = el.chatMessageInput.value.trim();
     if (!text || !state.activeChatFriend || !state.currentUser) return;
 
@@ -1694,36 +1975,17 @@ function sendMessage() {
         timestamp: time
     };
 
+    state.activeChatFriend.chatHistory = state.activeChatFriend.chatHistory || [];
     state.activeChatFriend.chatHistory.push(newMsg);
     
-    if (state.activeChatFriend.isOnline) {
-        setTimeout(() => {
-            const replies = [
-                "Zo'r qo'shiq ekan! Menga yoqdi 👍",
-                "Hozir tinglab ko'raman, rahmat!",
-                "Qalay ketyapti? Sayt daxshat chiqibdi lekin!",
-                "Musiqani to'xtatmasdan yozishgani zo'r ekana!",
-                "VibeStream rostan ham chiroyli platforma bo'libdi."
-            ];
-            const randomReply = replies[Math.floor(Math.random() * replies.length)];
-            const replyMsg = {
-                id: `msg_${Date.now() + 1}`,
-                sender: state.activeChatFriend.username,
-                type: "text",
-                content: randomReply,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            state.activeChatFriend.chatHistory.push(replyMsg);
-            saveToLocalStorage();
-            if (state.activeView === "chat" && state.activeChatFriend.username === replyMsg.sender) {
-                renderChatMessages();
-            }
-        }, 2000);
-    }
-
-    el.chatMessageInput.value = "";
-    saveToLocalStorage();
     renderChatMessages();
+    el.chatMessageInput.value = "";
+    
+    saveToLocalStorage();
+    
+    const chatKey = `chat_${[state.currentUser.username.toLowerCase(), state.activeChatFriend.username.toLowerCase()].sort().join("_")}`;
+    await kvdbPut(chatKey, state.activeChatFriend.chatHistory);
+    notifyRecipient(state.activeChatFriend.username);
 }
 
 el.btnSendMessage.addEventListener("click", sendMessage);
@@ -1776,7 +2038,7 @@ function openShareModal(songId) {
     el.modalOverlay.classList.remove("hidden");
 }
 
-function shareSongToFriend(friendUsername, songId) {
+async function shareSongToFriend(friendUsername, songId) {
     const friend = state.friends.find(f => f.username === friendUsername);
     const song = state.songCache[songId];
     if (!friend || !state.currentUser || !song) return;
@@ -1790,36 +2052,17 @@ function shareSongToFriend(friendUsername, songId) {
         timestamp: time
     };
 
+    friend.chatHistory = friend.chatHistory || [];
     friend.chatHistory.push(shareMsg);
     
-    if (friend.isOnline) {
-        setTimeout(() => {
-            const replies = [
-                "Eee, daxshat tarona! Rahmat ulashganing uchun!",
-                "Mening sevimli musiqam-ku bu! Kelishimiz zo'r!",
-                "Hozir pleyerda qo'yib eshityapman 🎧",
-                "Ovozini baland qilib eshitadigan tarona ekan rostan ham."
-            ];
-            const randomReply = replies[Math.floor(Math.random() * replies.length)];
-            const replyMsg = {
-                id: `msg_${Date.now() + 1}`,
-                sender: friend.username,
-                type: "text",
-                content: randomReply,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            friend.chatHistory.push(replyMsg);
-            saveToLocalStorage();
-            if (state.activeView === "chat" && state.activeChatFriend.username === replyMsg.sender) {
-                renderChatMessages();
-            }
-        }, 2000);
-    }
-
     saveToLocalStorage();
     el.shareSongModal.classList.add("hidden");
     el.modalOverlay.classList.add("hidden");
     showToast(`Qo'shiq "${friendUsername}"ga yuborildi!`);
+    
+    const chatKey = `chat_${[state.currentUser.username.toLowerCase(), friendUsername.toLowerCase()].sort().join("_")}`;
+    await kvdbPut(chatKey, friend.chatHistory);
+    notifyRecipient(friendUsername);
 }
 
 el.btnPlayerShare.addEventListener("click", () => {
@@ -1865,91 +2108,10 @@ function init() {
     
     navigateTo("home");
     
-    // Real Google Sign-in Integration Setup
-    initializeGoogleSignIn();
-
+    // Start background poller for inbox and chats (every 5 seconds)
+    setInterval(pollInboxAndChats, 5000);
+    
     console.log("VibeStream Real Music Engine initialized successfully!");
-}
-
-// --- 18. GOOGLE OAUTH FUNCTIONS ---
-function initializeGoogleSignIn() {
-    if (typeof google === "undefined" || !google.accounts) {
-        // Retry in 500ms in case the script tag hasn't finished loading asynchronously
-        setTimeout(initializeGoogleSignIn, 500);
-        return;
-    }
-
-    if (window.location.protocol === "file:") {
-        console.warn("Google Sign-In requires http/https origin. Set up a local server to test.");
-        const container = document.getElementById("google-signin-btn-container");
-        if (container) {
-            container.innerHTML = `
-                <div style="font-size:11.5px; color:var(--text-grey); text-align:center; padding: 4px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; width: 100%;">
-                    <i class="fa-brands fa-google"></i> Real Google Sign-in requires localhost server
-                </div>`;
-        }
-        return;
-    }
-
-    try {
-        const isClientConfigured = AUTH_CONFIG.googleClientId && AUTH_CONFIG.googleClientId !== "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
-        if (isClientConfigured) {
-            google.accounts.id.initialize({
-                client_id: AUTH_CONFIG.googleClientId,
-                callback: handleGoogleCredential
-            });
-            
-            google.accounts.id.renderButton(
-                document.getElementById("google-signin-btn-container"),
-                { theme: "outline", size: "large", width: 240 }
-            );
-        } else {
-            const container = document.getElementById("google-signin-btn-container");
-            if (container) {
-                container.innerHTML = `
-                    <div style="font-size:11.5px; color:var(--text-grey); text-align:center; padding: 4px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; width: 100%;">
-                        <i class="fa-brands fa-google"></i> Configure googleClientId in app.js
-                    </div>`;
-            }
-        }
-    } catch (err) {
-        console.error("Google Sign-In initialization failed:", err);
-    }
-}
-
-function handleGoogleCredential(response) {
-    try {
-        const token = response.credential;
-        // Simple base64 decoding of the JWT payload
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-
-        const payload = JSON.parse(jsonPayload);
-        
-        // Log in user
-        const googleUser = {
-            email: payload.email,
-            username: payload.name.replace(/\s+/g, ''),
-            avatar: payload.picture
-        };
-
-        // Add to registered list if not already
-        if (!state.registeredUsers.some(u => u.email.toLowerCase() === googleUser.email.toLowerCase())) {
-            state.registeredUsers.push({ email: googleUser.email, username: googleUser.username });
-        }
-
-        state.currentUser = googleUser;
-        saveToLocalStorage();
-        updateAuthUI();
-        closeAuthModal();
-        showToast(`Google orqali kirdingiz! Xush kelibsiz, ${googleUser.username}!`);
-    } catch (err) {
-        console.error("Failed to parse Google login token:", err);
-        showToast("Google tokenini o'qishda xatolik yuz berdi.");
-    }
 }
 
 window.onload = init;
