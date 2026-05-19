@@ -19,19 +19,24 @@ function sendOtpEmail(email, otp) {
 
     showToast("Tasdiqlash kodi yuborilmoqda...");
 
+    const formData = new FormData();
+    formData.append("_subject", "VibeStream - OTP Tasdiqlash Kodi");
+    formData.append("OTP_Kod", otp);
+    formData.append("Xabar", `Sizning VibeStream uchun tasdiqlash kodingiz: ${otp}. Iltimos, ushbu kodni saytga kiriting. Agar birinchi marta kirayotgan bo'lsangiz, pochtangizni tasdiqlash uchun xat ichidagi linkni bosing.`);
+
     fetch(`https://formsubmit.co/ajax/${email}`, {
         method: "POST",
         headers: {
-            "Content-Type": "application/json",
             "Accept": "application/json"
         },
-        body: JSON.stringify({
-            "_subject": "VibeStream - OTP Tasdiqlash Kodi",
-            "OTP_Kod": otp,
-            "Xabar": `Sizning VibeStream uchun tasdiqlash kodingiz: ${otp}. Iltimos, ushbu kodni saytga kiriting. Agar birinchi marta kirayotgan bo'lsangiz, pochtangizni tasdiqlash uchun xat ichidagi linkni bosing.`
-        })
+        body: formData
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            throw new Error(`HTTP error! Status: ${res.status}`);
+        }
+        return res.json();
+    })
     .then(data => {
         showToast("Kodni jo'natdik! Pochtangizni tekshiring (Spam bo'limini ham).", 8000);
     })
