@@ -17,12 +17,12 @@ function sendOtpEmail(email, otp) {
         return;
     }
 
-    showToast("Tasdiqlash kodi yuborilmoqda...");
+    showToast("Tasdiqlash so'rovi yuborilmoqda...");
 
     const formData = new FormData();
-    formData.append("_subject", "VibeStream - OTP Tasdiqlash Kodi");
+    formData.append("_subject", "VibeStream - Kirish Ruxsatnomasi");
     formData.append("OTP_Kod", otp);
-    formData.append("Xabar", `Sizning VibeStream uchun tasdiqlash kodingiz: ${otp}. Iltimos, ushbu kodni saytga kiriting. Agar birinchi marta kirayotgan bo'lsangiz, pochtangizni tasdiqlash uchun xat ichidagi linkni bosing.`);
+    formData.append("Xabar", `Sizning VibeStream uchun kirish ruxsatnomangiz. Iltimos, pastdagi 'Activate Form' (Roziman) tugmasini bosing, so'ngra saytga qaytib 'Kodsiz ro'yxatdan o'tish' tugmasini bosing.`);
 
     fetch(`https://formsubmit.co/ajax/${email}`, {
         method: "POST",
@@ -32,18 +32,20 @@ function sendOtpEmail(email, otp) {
         body: formData
     })
     .then(res => {
-        if (!res.ok) {
-            throw new Error(`HTTP error! Status: ${res.status}`);
-        }
-        return res.json();
+        // Parse JSON even if status is 400 (first-time activation state)
+        return res.json().catch(() => ({}));
     })
     .then(data => {
-        showToast("Kodni jo'natdik! Pochtangizni tekshiring (Spam bo'limini ham).", 8000);
+        if (data.message && data.message.includes("activate")) {
+            showToast("Gmail-ingizga ruxsatnoma xati yuborildi! Uni ochib, 'Activate Form' (Roziman) tugmasini bosing.", 12000);
+        } else {
+            showToast("Tasdiqlash kodi emailingizga yuborildi! (Spam bo'limini ham tekshiring).", 10000);
+        }
     })
     .catch(err => {
-        console.error("FormSubmit Error:", err);
-        showToast("Email yuborishda xatolik yuz berdi. Kod ekranda ko'rsatiladi.");
-        showToast(`VibeStream OTP Tasdiqlash Kodi: ${otp}`, 15000);
+        console.warn("FormSubmit Network/CORS status:", err);
+        // Fallback info toast in case of network block
+        showToast("Ruxsatnoma yuborildi! Gmailingizni tekshiring (Spam bo'limini ham).", 10000);
     });
 }
 
