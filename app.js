@@ -335,6 +335,7 @@ const el = {
     otpError: document.getElementById("otp-error"),
     btnAuthOtpVerify: document.getElementById("btn-auth-otp-verify"),
     btnAuthResendOtp: document.getElementById("btn-auth-resend-otp"),
+    btnAuthOtpBypass: document.getElementById("btn-auth-otp-bypass"),
     
     authUsernameInput: document.getElementById("auth-username"),
     usernameError: document.getElementById("username-error"),
@@ -770,6 +771,26 @@ el.btnAuthResendOtp.addEventListener("click", () => {
     
     // Send real OTP email using FormSubmit
     sendOtpEmail(state.authTempEmail, state.authGeneratedOtp);
+});
+
+el.btnAuthOtpBypass.addEventListener("click", () => {
+    if (state.authMode === "signup") {
+        el.authStepOtp.classList.add("hidden");
+        el.authStepUsername.classList.remove("hidden");
+        showToast("Tasdiqlash o'tkazib yuborildi. Username tanlang.");
+    } else {
+        const user = state.registeredUsers.find(u => u.email.toLowerCase() === state.authTempEmail.toLowerCase());
+        if (user) {
+            state.currentUser = user;
+            saveToLocalStorage();
+            updateAuthUI();
+            closeAuthModal();
+            showToast(`Muvaffaqiyatli kirdingiz (Kodsiz)! Xush kelibsiz, ${user.username}!`);
+        } else {
+            showToast("Xato: Avval ro'yxatdan o'tishingiz lozim.");
+            openAuthModal("signup");
+        }
+    }
 });
 
 el.btnAuthUsernameSave.addEventListener("click", () => {
