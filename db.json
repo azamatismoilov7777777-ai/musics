@@ -47,9 +47,57 @@
       "username": "azamat",
       "passwordHash": "96cae35ce8a9b0244178bf28e4966c2ce1b8385723a96a6b838858cdd6ca0a1e",
       "friends": [],
+      "online": false,
+      "lastActive": 1779953723477
+    },
+    {
+      "email": "azamatismoilov7777777@gmail.com",
+      "username": "azamatt",
+      "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+      "friends": [
+        "azamattt"
+      ],
       "online": true,
-      "lastActive": 1779952916965
+      "lastActive": 1779953918008
+    },
+    {
+      "email": "azamatismoilov802@gmail.com",
+      "username": "azamattt",
+      "passwordHash": "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5",
+      "friends": [
+        "azamatt"
+      ],
+      "online": true,
+      "lastActive": 1779953941994
     }
   ],
-  "messages": []
+  "messages": [
+    {
+      "id": "msg_1779953965100_c2msal823",
+      "sender": "azamattt",
+      "receiver": "azamatt",
+      "content": "salom",
+      "type": "text",
+      "songId": null,
+      "timestamp": 1779953965100
+    },
+    {
+      "id": "msg_1779953976192_e145x6ba8",
+      "sender": "azamatt",
+      "receiver": "azamattt",
+      "content": "yaxshimisiz",
+      "type": "text",
+      "songId": null,
+      "timestamp": 1779953976192
+    },
+    {
+      "id": "msg_1779953991896_repavsb4m",
+      "sender": "azamattt",
+      "receiver": "azamatt",
+      "content": "ha rahmat ozingizchi",
+      "type": "text",
+      "songId": null,
+      "timestamp": 1779953991896
+    }
+  ]
 }
