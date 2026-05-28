@@ -216,11 +216,11 @@ const el = {
     playlistCoverArt: document.getElementById("playlist-cover-art-container"),
 
     // Chat View elements
-    chatFriendName: document.getElementById("chat-friend-name"),
-    chatMessagesContainer: document.getElementById("chat-messages-container"),
-    chatMessageInput: document.getElementById("chat-message-input"),
-    btnSendMessage: document.getElementById("btn-send-message"),
-    btnCloseChat: document.getElementById("btn-close-chat"),
+    chatFriendName: document.getElementById("chat-friend-name-premium"),
+    chatMessagesContainer: document.getElementById("chat-messages-container-premium"),
+    chatMessageInput: document.getElementById("chat-message-input-premium"),
+    btnSendMessage: document.getElementById("btn-send-message-premium"),
+    btnCloseChat: document.getElementById("btn-close-chat-premium"),
 
     // Bottom Player elements
     audio: document.getElementById("main-audio-element"),
@@ -359,20 +359,9 @@ async function loadFromLocalStorage() {
     if (user) {
         state.currentUser = JSON.parse(user);
         updateAuthUI();
-        
-        // Asynchronously refresh user profile from server to keep synced
-        try {
-            const userData = await kvdbGet(`user_${state.currentUser.username.toLowerCase()}`);
-            if (userData && userData.password === state.currentUser.password) {
-                state.playlists = userData.playlists || [];
-                state.friends = userData.friends || [];
-                saveToLocalStorage();
-                renderSidebarPlaylists();
-                renderFriendsList();
-            }
-        } catch (e) {
-            console.warn("Could not sync user data from server on startup:", e);
-        }
+        // Initialize socket and conversations with Node.js server
+        initSocketConnection();
+        fetchConversations();
     }
 }
 
@@ -780,62 +769,44 @@ el.btnSubmitSignup.addEventListener("click", async () => {
     
     if (hasError) return;
     
-    // 1. Local uniqueness check first
-    const localExists = state.registeredUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
-    if (localExists) {
-        el.signupUsernameError.textContent = "Bu username band, boshqasini tanlang!";
-        el.signupUsernameError.classList.remove("hidden");
-        return;
-    }
-    
-    showToast("Tekshirilmoqda...");
-    
-    // 2. Optional cloud uniqueness check
-    try {
-        const existingUser = await kvdbGet(`user_${username.toLowerCase()}`);
-        if (existingUser) {
-            el.signupUsernameError.textContent = "Bu username band, boshqasini tanlang!";
-            el.signupUsernameError.classList.remove("hidden");
-            return;
-        }
-    } catch (err) {
-        console.warn("KVDB user check failed, falling back to local database:", err);
-    }
-    
     showToast("Ro'yxatdan o'tkazilmoqda...");
     
-    const newUser = {
-        email: email,
-        username: username,
-        password: password,
-        playlists: [],
-        friends: []
-    };
-    
-    // Add user locally first so that the user can immediately log in next time
-    if (!state.registeredUsers.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-        state.registeredUsers.push(newUser);
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, username, password })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem("vibestream_token", data.token);
+            
+            state.currentUser = { email, username };
+            state.playlists = [];
+            state.friends = [];
+            
+            saveToLocalStorage();
+            updateAuthUI();
+            closeAuthModal();
+            
+            renderSidebarPlaylists();
+            renderFriendsList();
+            renderConversationsList();
+            
+            initSocketConnection();
+            navigateTo("home");
+            
+            showToast(`Akkaunt yaratildi! Xush kelibsiz, ${username}!`);
+        } else {
+            const data = await response.json();
+            el.signupUsernameError.textContent = data.error || "Ro'yxatdan o'tishda xatolik!";
+            el.signupUsernameError.classList.remove("hidden");
+        }
+    } catch (err) {
+        console.error("Signup backend error:", err);
+        showToast("Tarmoq xatosi, serverni tekshiring.");
     }
-    
-    state.currentUser = { email, username, password };
-    state.playlists = [];
-    state.friends = [];
-    
-    // Save locally and update UI instantly
-    saveToLocalStorage();
-    updateAuthUI();
-    closeAuthModal();
-    
-    renderSidebarPlaylists();
-    renderFriendsList();
-    navigateTo("home");
-    
-    showToast(`Akkaunt yaratildi! Xush kelibsiz, ${username}!`);
-    
-    // Try background upload to server, if it fails, it's fine since we saved locally
-    kvdbPut(`user_${username.toLowerCase()}`, newUser).catch(err => {
-        console.warn("KVDB upload failed in background:", err);
-    });
 });
 
 el.btnSubmitLogin.addEventListener("click", async () => {
@@ -863,92 +834,40 @@ el.btnSubmitLogin.addEventListener("click", async () => {
     
     showToast("Kirilmoqda...");
     
-    // 1. Local storage verification (works offline or immediately)
-    const localUser = state.registeredUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
-    if (localUser) {
-        if (localUser.password === password) {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem("vibestream_token", data.token);
+            
             state.currentUser = {
-                email: localUser.email,
-                username: localUser.username,
-                password: localUser.password
+                email: data.email,
+                username: data.username
             };
-            state.playlists = localUser.playlists || [];
-            state.friends = localUser.friends || [];
             
             saveToLocalStorage();
             updateAuthUI();
             closeAuthModal();
             
             renderSidebarPlaylists();
-            renderFriendsList();
+            await fetchConversations();
+            initSocketConnection();
+            
             navigateTo("home");
-            showToast(`Xush kelibsiz, ${localUser.username}!`);
-            
-            // Sync with server in background to get latest playlists/friends if online
-            kvdbGet(`user_${username.toLowerCase()}`).then(userData => {
-                if (userData && userData.password === password) {
-                    state.playlists = userData.playlists || [];
-                    state.friends = userData.friends || [];
-                    saveToLocalStorage();
-                    renderSidebarPlaylists();
-                    renderFriendsList();
-                }
-            }).catch(e => console.warn("KVDB sync failed on login background:", e));
-            
-            return;
+            showToast(`Xush kelibsiz, ${data.username}!`);
         } else {
-            el.loginPasswordError.textContent = "Noto'g'ri parol!";
+            const data = await response.json();
+            el.loginPasswordError.textContent = data.error || "Username yoki parol noto'g'ri!";
             el.loginPasswordError.classList.remove("hidden");
-            return;
         }
-    }
-    
-    // 2. Cloud database fallback (in case they signed up on another device)
-    try {
-        const userData = await kvdbGet(`user_${username.toLowerCase()}`);
-        if (!userData) {
-            el.loginUsernameError.textContent = "Bunday foydalanuvchi topilmadi!";
-            el.loginUsernameError.classList.remove("hidden");
-            return;
-        }
-        
-        if (userData.password !== password) {
-            el.loginPasswordError.textContent = "Noto'g'ri parol!";
-            el.loginPasswordError.classList.remove("hidden");
-            return;
-        }
-        
-        state.currentUser = {
-            email: userData.email,
-            username: userData.username,
-            password: userData.password
-        };
-        state.playlists = userData.playlists || [];
-        state.friends = userData.friends || [];
-        
-        // Add to local database
-        if (!state.registeredUsers.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-            state.registeredUsers.push({
-                email: userData.email,
-                username: userData.username,
-                password: userData.password,
-                playlists: userData.playlists || [],
-                friends: userData.friends || []
-            });
-        }
-        
-        saveToLocalStorage();
-        updateAuthUI();
-        closeAuthModal();
-        
-        renderSidebarPlaylists();
-        renderFriendsList();
-        navigateTo("home");
-        showToast(`Xush kelibsiz, ${userData.username}!`);
     } catch (err) {
-        console.error("Login error:", err);
-        el.loginUsernameError.textContent = "Bunday foydalanuvchi topilmadi (tarmoq xatosi)!";
-        el.loginUsernameError.classList.remove("hidden");
+        console.error("Login backend error:", err);
+        showToast("Tarmoq xatosi, serverni tekshiring.");
     }
 });
 
@@ -965,6 +884,11 @@ el.btnLogout.addEventListener("click", () => {
     state.currentUser = null;
     state.playlists = [];
     state.friends = [];
+    localStorage.removeItem("vibestream_token");
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
     saveToLocalStorage();
     updateAuthUI();
     renderSidebarPlaylists();
@@ -1645,284 +1569,532 @@ el.btnPlayerAddPlaylist.addEventListener("click", () => {
 });
 
 
-// --- 15. FRIENDS & DIRECT MESSAGING SYSTEM ---
-let chatPollInterval = null;
+// --- 15. FRIENDS & REAL-TIME DIRECT MESSAGING SYSTEM ---
+const BACKEND_URL = "http://localhost:3000";
+let socket = null;
+let typingTimeout = null;
 
-async function syncChatWithServer() {
-    if (!state.activeChatFriend || !state.currentUser) return;
-    const chatKey = `chat_${[state.currentUser.username.toLowerCase(), state.activeChatFriend.username.toLowerCase()].sort().join("_")}`;
-    const serverChat = await kvdbGet(chatKey);
-    if (serverChat) {
-        if (JSON.stringify(state.activeChatFriend.chatHistory) !== JSON.stringify(serverChat)) {
-            state.activeChatFriend.chatHistory = serverChat;
-            renderChatMessages();
+// Initialize socket connection
+function initSocketConnection() {
+    const token = localStorage.getItem("vibestream_token");
+    if (!token || !state.currentUser) {
+        if (socket) {
+            socket.disconnect();
+            socket = null;
         }
-    }
-}
-
-function startChatPolling() {
-    stopChatPolling();
-    syncChatWithServer();
-    chatPollInterval = setInterval(syncChatWithServer, 3000); // Poll every 3 seconds
-}
-
-function stopChatPolling() {
-    if (chatPollInterval) {
-        clearInterval(chatPollInterval);
-        chatPollInterval = null;
-    }
-}
-
-async function notifyRecipient(recipientUsername) {
-    if (!state.currentUser) return;
-    const myName = state.currentUser.username;
-    const inboxKey = `inbox_${recipientUsername.toLowerCase()}`;
-    try {
-        const inbox = await kvdbGet(inboxKey) || [];
-        if (!inbox.some(name => name.toLowerCase() === myName.toLowerCase())) {
-            inbox.push(myName);
-            await kvdbPut(inboxKey, inbox);
-        }
-    } catch (e) {
-        console.warn("Failed to notify recipient:", e);
-    }
-}
-
-async function pollInboxAndChats() {
-    if (!state.currentUser) return;
-    const myName = state.currentUser.username.toLowerCase();
-    
-    // 1. Poll inbox for new friends/interactions
-    try {
-        const inbox = await kvdbGet(`inbox_${myName}`);
-        if (inbox && Array.isArray(inbox)) {
-            let changed = false;
-            for (const sender of inbox) {
-                const alreadyFriend = state.friends.find(f => f.username.toLowerCase() === sender.toLowerCase());
-                if (!alreadyFriend) {
-                    let properName = sender;
-                    try {
-                        const profile = await kvdbGet(`user_${sender.toLowerCase()}`);
-                        if (profile && profile.username) {
-                            properName = profile.username;
-                        }
-                    } catch (e) {}
-                    
-                    state.friends.push({
-                        username: properName,
-                        chatHistory: []
-                    });
-                    changed = true;
-                    showToast(`"${properName}" sizni do'stlar ro'yxatiga qo'shdi!`);
-                }
-            }
-            if (changed) {
-                saveToLocalStorage();
-                renderFriendsList();
-            }
-        }
-    } catch (e) {
-        console.warn("Error polling inbox:", e);
-    }
-
-    // 2. Poll chats for all existing friends to receive new messages in real-time
-    for (let friend of state.friends) {
-        const chatKey = `chat_${[state.currentUser.username.toLowerCase(), friend.username.toLowerCase()].sort().join("_")}`;
-        try {
-            const serverChat = await kvdbGet(chatKey);
-            if (serverChat && Array.isArray(serverChat)) {
-                const localHistoryStr = JSON.stringify(friend.chatHistory || []);
-                const serverHistoryStr = JSON.stringify(serverChat);
-                if (localHistoryStr !== serverHistoryStr) {
-                    const oldLength = (friend.chatHistory || []).length;
-                    friend.chatHistory = serverChat;
-                    saveToLocalStorage();
-
-                    if (state.activeChatFriend && state.activeChatFriend.username.toLowerCase() === friend.username.toLowerCase()) {
-                        renderChatMessages();
-                    } else {
-                        const newMsgs = serverChat.slice(oldLength);
-                        for (const msg of newMsgs) {
-                            if (msg.sender.toLowerCase() !== state.currentUser.username.toLowerCase()) {
-                                if (msg.type === "text") {
-                                    showToast(`"${friend.username}": ${msg.content}`);
-                                } else if (msg.type === "song") {
-                                    showToast(`"${friend.username}" sizga musiqa yubordi!`);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn(`Error polling chat with ${friend.username}:`, e);
-        }
-    }
-}
-
-function renderFriendsList() {
-    if (!state.currentUser) return;
-    
-    if (state.friends.length === 0) {
-        el.friendsContainer.innerHTML = `<div class="sidebar-item" style="color: var(--text-grey); font-size:13px; cursor:default; justify-content:center;">Do'stlar ro'yxati bo'sh</div>`;
         return;
     }
-    
-    el.friendsContainer.innerHTML = state.friends.map(friend => `
-        <div class="sidebar-item friend-item" data-friend-name="${friend.username}">
-            <div class="item-art">
-                <i class="fa-solid fa-user-ninja"></i>
-            </div>
-            <div class="item-meta">
-                <span class="item-title">${friend.username}</span>
-                <span class="item-subtitle">friend</span>
-            </div>
-        </div>
-    `).join('');
 
-    document.querySelectorAll(".friend-item").forEach(row => {
+    if (socket) return; // Already connected
+
+    socket = io(BACKEND_URL, {
+        auth: { token }
+    });
+
+    socket.on('connect', () => {
+        console.log("Connected to VibeStream Chat Socket");
+    });
+
+    socket.on('message', (msg) => {
+        const friendUsername = msg.sender.toLowerCase() === state.currentUser.username.toLowerCase() 
+            ? msg.receiver 
+            : msg.sender;
+            
+        let friend = state.friends.find(f => f.username.toLowerCase() === friendUsername.toLowerCase());
+        if (!friend) {
+            friend = {
+                username: friendUsername,
+                chatHistory: [],
+                online: true
+            };
+            state.friends.push(friend);
+            saveToLocalStorage();
+            renderFriendsList();
+            renderConversationsList();
+        }
+
+        friend.chatHistory = friend.chatHistory || [];
+        if (!friend.chatHistory.some(m => m.id === msg.id)) {
+            friend.chatHistory.push(msg);
+            saveToLocalStorage();
+            
+            if (state.activeChatFriend && state.activeChatFriend.username.toLowerCase() === friendUsername.toLowerCase()) {
+                renderChatMessages();
+            } else if (msg.sender.toLowerCase() !== state.currentUser.username.toLowerCase()) {
+                if (msg.type === "text") {
+                    showToast(`"${friendUsername}": ${msg.content}`);
+                } else if (msg.type === "song") {
+                    showToast(`"${friendUsername}" sizga musiqa yubordi!`);
+                }
+            }
+            renderConversationsList();
+        }
+    });
+
+    socket.on('statusUpdate', ({ username, online, lastActive }) => {
+        const friend = state.friends.find(f => f.username.toLowerCase() === username.toLowerCase());
+        if (friend) {
+            friend.online = online;
+            friend.lastActive = lastActive;
+            saveToLocalStorage();
+            renderFriendsList();
+            renderConversationsList();
+            
+            if (state.activeChatFriend && state.activeChatFriend.username.toLowerCase() === username.toLowerCase()) {
+                updateActiveChatHeaderStatus();
+            }
+        }
+    });
+
+    socket.on('typing', ({ sender, isTyping }) => {
+        if (state.activeChatFriend && state.activeChatFriend.username.toLowerCase() === sender.toLowerCase()) {
+            const typingIndicator = document.getElementById("chat-typing-indicator");
+            const typingText = document.getElementById("chat-typing-text");
+            if (typingIndicator && typingText) {
+                if (isTyping) {
+                    typingIndicator.classList.remove("hidden");
+                    typingText.textContent = `${sender} yozmoqda...`;
+                } else {
+                    typingIndicator.classList.add("hidden");
+                }
+            }
+        }
+    });
+
+    socket.on('connect_error', (err) => {
+        console.warn("Socket connection failed:", err.message);
+    });
+
+    socket.on('disconnect', () => {
+        console.log("Disconnected from VibeStream Chat Socket");
+    });
+}
+
+// Fetch conversations from server
+async function fetchConversations() {
+    const token = localStorage.getItem("vibestream_token");
+    if (!token) return;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/conversations`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const list = await res.json();
+            list.forEach(item => {
+                let localFriend = state.friends.find(f => f.username.toLowerCase() === item.username.toLowerCase());
+                if (localFriend) {
+                    localFriend.online = item.online;
+                    localFriend.lastActive = item.lastActive;
+                    if (item.lastMessage) {
+                        localFriend.chatHistory = localFriend.chatHistory || [];
+                        if (!localFriend.chatHistory.some(m => m.id === item.lastMessage.id)) {
+                            localFriend.chatHistory.push(item.lastMessage);
+                        }
+                    }
+                } else {
+                    state.friends.push({
+                        username: item.username,
+                        online: item.online,
+                        lastActive: item.lastActive,
+                        chatHistory: item.lastMessage ? [item.lastMessage] : []
+                    });
+                }
+            });
+            saveToLocalStorage();
+            renderFriendsList();
+            renderConversationsList();
+        }
+    } catch (e) {
+        console.warn("Failed to fetch conversations:", e);
+    }
+}
+
+// Fetch chat history with active friend
+async function fetchChatHistory(friendUsername) {
+    const token = localStorage.getItem("vibestream_token");
+    if (!token) return;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/messages/${friendUsername}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const history = await res.json();
+            const friend = state.friends.find(f => f.username.toLowerCase() === friendUsername.toLowerCase());
+            if (friend) {
+                friend.chatHistory = history;
+                saveToLocalStorage();
+                if (state.activeChatFriend && state.activeChatFriend.username.toLowerCase() === friendUsername.toLowerCase()) {
+                    renderChatMessages();
+                }
+            }
+        }
+    } catch (e) {
+        console.warn(`Failed to fetch messages for ${friendUsername}:`, e);
+    }
+}
+
+// Render Conversations List in Left Pane
+function renderConversationsList() {
+    const listContainer = document.getElementById("recent-conversations-list");
+    if (!listContainer) return;
+
+    if (state.friends.length === 0) {
+        listContainer.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-grey); font-size:12px;">Suhbatlar mavjud emas</div>`;
+        return;
+    }
+
+    const sortedFriends = [...state.friends].sort((a, b) => {
+        const lastA = a.chatHistory && a.chatHistory.length > 0 ? new Date(a.chatHistory[a.chatHistory.length - 1].timestamp).getTime() : 0;
+        const lastB = b.chatHistory && b.chatHistory.length > 0 ? new Date(b.chatHistory[b.chatHistory.length - 1].timestamp).getTime() : 0;
+        return lastB - lastA;
+    });
+
+    listContainer.innerHTML = sortedFriends.map(friend => {
+        const isActive = state.activeChatFriend && state.activeChatFriend.username.toLowerCase() === friend.username.toLowerCase() ? "active" : "";
+        const isOnline = friend.online ? "online" : "offline";
+        
+        let lastMsgText = "Yozishma yo'q";
+        let lastMsgTime = "";
+        if (friend.chatHistory && friend.chatHistory.length > 0) {
+            const lastMsg = friend.chatHistory[friend.chatHistory.length - 1];
+            if (lastMsg.type === "text") {
+                lastMsgText = lastMsg.content;
+            } else if (lastMsg.type === "song") {
+                lastMsgText = "🎵 Musiqa ulashdi";
+            }
+            if (lastMsg.timestamp) {
+                const date = new Date(lastMsg.timestamp);
+                lastMsgTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+
+        return `
+            <div class="conv-item-premium ${isActive}" data-friend-name="${friend.username}">
+                <div class="conv-avatar-premium">
+                    <i class="fa-solid fa-user-ninja"></i>
+                    <span class="conv-status-badge-premium ${isOnline}"></span>
+                </div>
+                <div class="conv-meta-premium">
+                    <div class="conv-title-row-premium">
+                        <h4>${friend.username}</h4>
+                        <span class="conv-time-premium">${lastMsgTime}</span>
+                    </div>
+                    <span class="conv-last-msg-premium">${lastMsgText}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    listContainer.querySelectorAll(".conv-item-premium").forEach(row => {
         row.addEventListener("click", () => {
             const friendName = row.getAttribute("data-friend-name");
-            state.activeChatFriend = state.friends.find(f => f.username === friendName);
-            navigateTo("chat");
+            openChatWithFriend(friendName);
         });
     });
 }
 
-el.btnToggleFindFriend.addEventListener("click", () => {
-    if (!state.currentUser) {
-        openAuthModal("signup");
-        return;
-    }
-    el.friendSearchBox.classList.toggle("hidden");
-    el.inputSearchFriend.value = "";
-    el.friendSearchResults.innerHTML = "";
-});
+function openChatWithFriend(friendUsername) {
+    state.activeChatFriend = state.friends.find(f => f.username.toLowerCase() === friendUsername.toLowerCase());
+    if (!state.activeChatFriend) return;
 
-el.btnCloseFriendSearch.addEventListener("click", () => {
-    el.friendSearchBox.classList.add("hidden");
-});
+    const emptyState = document.getElementById("chat-empty-state");
+    const chatContainer = document.getElementById("chat-container-premium");
+    if (emptyState) emptyState.classList.add("hidden");
+    if (chatContainer) chatContainer.classList.remove("hidden");
 
-let friendSearchDebounce = null;
-el.inputSearchFriend.addEventListener("input", (e) => {
-    const query = e.target.value.trim();
-    if (query === "") {
-        el.friendSearchResults.innerHTML = "";
-        return;
-    }
+    renderConversationsList();
 
-    if (friendSearchDebounce) clearTimeout(friendSearchDebounce);
-
-    friendSearchDebounce = setTimeout(async () => {
-        if (!state.currentUser) return;
-
-        // 1. Search locally in state.registeredUsers (allowing partial match)
-        const matchedUsers = state.registeredUsers.filter(u => 
-            u.username.toLowerCase().includes(query.toLowerCase()) && 
-            u.username.toLowerCase() !== state.currentUser.username.toLowerCase()
-        );
-
-        if (matchedUsers.length > 0) {
-            el.friendSearchResults.innerHTML = matchedUsers.map(user => {
-                const isAlreadyFriend = state.friends.some(f => f.username.toLowerCase() === user.username.toLowerCase());
-                return `
-                    <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 4px; border-bottom:1px solid rgba(255,255,255,0.05);">
-                        <span class="search-result-name" style="color:#fff; font-size:13px;">${user.username}</span>
-                        ${isAlreadyFriend ? 
-                            `<span style="color:var(--text-grey); font-size:11px;">Allaqachon do'st</span>` : 
-                            `<button class="btn-add-friend-action" data-username="${user.username}" style="background:var(--spotify-green); border:none; color:#000; padding:2px 8px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:bold;"><i class="fa-solid fa-plus"></i> Qo'shish</button>`
-                        }
-                    </div>
-                `;
-            }).join('');
-
-            el.friendSearchResults.querySelectorAll(".btn-add-friend-action").forEach(btn => {
-                btn.addEventListener("click", () => {
-                    const uname = btn.getAttribute("data-username");
-                    addFriend(uname);
-                });
-            });
-            return;
-        }
-
-        // 2. Cloud check fallback (for exact match in case the user registered from another device/browser)
-        el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);"><i class="fa-solid fa-spinner fa-spin"></i> Qidirilmoqda...</div>`;
-
-        try {
-            const userData = await kvdbGet(`user_${query.toLowerCase()}`);
-            if (userData && userData.username) {
-                if (userData.username.toLowerCase() === state.currentUser.username.toLowerCase()) {
-                    el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">O'zingizni do'st qilib qo'sha olmaysiz</div>`;
-                    return;
-                }
-                const isAlreadyFriend = state.friends.some(f => f.username.toLowerCase() === userData.username.toLowerCase());
-                el.friendSearchResults.innerHTML = `
-                    <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 4px; border-bottom:1px solid rgba(255,255,255,0.05);">
-                        <span class="search-result-name" style="color:#fff; font-size:13px;">${userData.username}</span>
-                        ${isAlreadyFriend ? 
-                            `<span style="color:var(--text-grey); font-size:11px;">Allaqachon do'st</span>` : 
-                            `<button class="btn-add-friend-action" data-username="${userData.username}" style="background:var(--spotify-green); border:none; color:#000; padding:2px 8px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:bold;"><i class="fa-solid fa-plus"></i> Qo'shish</button>`
-                        }
-                    </div>
-                `;
-
-                const btn = el.friendSearchResults.querySelector(".btn-add-friend-action");
-                if (btn) {
-                    btn.addEventListener("click", () => {
-                        addFriend(userData.username);
-                    });
-                }
-            } else {
-                el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
-            }
-        } catch (err) {
-            console.error("Search friend error:", err);
-            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
-        }
-    }, 300);
-});
-
-function addFriend(username) {
-    const newFriend = {
-        username: username,
-        chatHistory: []
-    };
-    
-    state.friends.push(newFriend);
-    saveToLocalStorage();
-    renderFriendsList();
-    
-    el.friendSearchBox.classList.add("hidden");
-    showToast(`"${username}" do'stlar ro'yxatiga qo'shildi!`);
-    
-    // Notify the added user that they should also list us
-    notifyRecipient(username);
-}
-
-function renderChatView() {
-    const friend = state.activeChatFriend;
-    if (!friend) return;
-
-    el.chatFriendName.textContent = friend.username;
-    const statusText = el.viewChat.querySelector(".chat-status");
-    statusText.textContent = "online";
-    statusText.className = "chat-status online";
+    const headerName = document.getElementById("chat-friend-name-premium");
+    if (headerName) headerName.textContent = state.activeChatFriend.username;
+    updateActiveChatHeaderStatus();
 
     renderChatMessages();
+    fetchChatHistory(state.activeChatFriend.username);
+    
+    navigateTo("chat");
 }
 
+function updateActiveChatHeaderStatus() {
+    const statusText = document.getElementById("chat-friend-status-premium");
+    if (!statusText || !state.activeChatFriend) return;
+
+    if (state.activeChatFriend.online) {
+        statusText.textContent = "online";
+        statusText.className = "chat-status-premium online";
+    } else {
+        const lastActiveTime = state.activeChatFriend.lastActive 
+            ? new Date(state.activeChatFriend.lastActive).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+            : "";
+        statusText.textContent = lastActiveTime ? `offline, oxirgi faollik: ${lastActiveTime}` : "offline";
+        statusText.className = "chat-status-premium offline";
+    }
+}
+
+// Add friend via API
+async function addFriendViaAPI(friendUsername) {
+    const token = localStorage.getItem("vibestream_token");
+    if (!token) return;
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/users/add-friend`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ friendUsername })
+        });
+        if (res.ok) {
+            showToast(`"${friendUsername}" do'stlar ro'yxatiga qo'shildi!`);
+            await fetchConversations();
+            openChatWithFriend(friendUsername);
+        } else {
+            const data = await res.json();
+            showToast(data.error || "Do'st qo'shib bo'lmadi");
+        }
+    } catch (e) {
+        console.warn("Failed to add friend via API:", e);
+        showToast("Xatolik yuz berdi");
+    }
+}
+
+// Render Friends list in sidebar
+function renderFriendsList() {
+    if (!state.currentUser) return;
+    
+    const container = document.getElementById("friends-container");
+    if (!container) return;
+
+    if (state.friends.length === 0) {
+        container.innerHTML = `<div class="sidebar-item" style="color: var(--text-grey); font-size:13px; cursor:default; justify-content:center;">Do'stlar ro'yxati bo'sh</div>`;
+        return;
+    }
+    
+    container.innerHTML = state.friends.map(friend => {
+        return `
+            <div class="sidebar-item friend-item" data-friend-name="${friend.username}">
+                <div class="item-art" style="position:relative;">
+                    <i class="fa-solid fa-user-ninja"></i>
+                    <span style="position:absolute; bottom:-2px; right:-2px; width:8px; height:8px; border-radius:50%; background:${friend.online ? '#00ffff' : '#666'}; border:1px solid #000;"></span>
+                </div>
+                <div class="item-meta">
+                    <span class="item-title">${friend.username}</span>
+                    <span class="item-subtitle">${friend.online ? 'online' : 'offline'}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll(".friend-item").forEach(row => {
+        row.addEventListener("click", () => {
+            const friendName = row.getAttribute("data-friend-name");
+            openChatWithFriend(friendName);
+        });
+    });
+}
+
+// Setup Event Listeners for Chat page
+function setupChatEventListeners() {
+    const chatSearchInput = document.getElementById("chat-user-search-input");
+    const chatSearchResults = document.getElementById("chat-user-search-results");
+
+    if (chatSearchInput && chatSearchResults) {
+        let chatSearchTimeout = null;
+        chatSearchInput.addEventListener("input", (e) => {
+            const query = e.target.value.trim();
+            if (!query) {
+                chatSearchResults.classList.add("hidden");
+                chatSearchResults.innerHTML = "";
+                return;
+            }
+
+            if (chatSearchTimeout) clearTimeout(chatSearchTimeout);
+            chatSearchTimeout = setTimeout(async () => {
+                const token = localStorage.getItem("vibestream_token");
+                if (!token) return;
+                try {
+                    const res = await fetch(`${BACKEND_URL}/api/users/search?q=${encodeURIComponent(query)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const user = await res.json();
+                        chatSearchResults.classList.remove("hidden");
+                        if (user) {
+                            if (user.username.toLowerCase() === state.currentUser.username.toLowerCase()) {
+                                chatSearchResults.innerHTML = `<div style="padding:10px; font-size:12px; color:var(--text-grey);">O'zingizni qo'sha olmaysiz</div>`;
+                                return;
+                            }
+                            const isAlreadyFriend = state.friends.some(f => f.username.toLowerCase() === user.username.toLowerCase());
+                            chatSearchResults.innerHTML = `
+                                <div class="chat-search-item-premium">
+                                    <span>${user.username}</span>
+                                    ${isAlreadyFriend ? 
+                                        `<button class="btn-add-chat-friend-premium" style="background:#555; color:#fff;" disabled>Do'st</button>` : 
+                                        `<button class="btn-add-chat-friend-premium" id="btn-add-searched-friend" data-username="${user.username}"><i class="fa-solid fa-plus"></i> Qo'shish</button>`
+                                    }
+                                </div>
+                            `;
+                            const addBtn = document.getElementById("btn-add-searched-friend");
+                            if (addBtn) {
+                                addBtn.addEventListener("click", async () => {
+                                    const uname = addBtn.getAttribute("data-username");
+                                    await addFriendViaAPI(uname);
+                                    chatSearchInput.value = "";
+                                    chatSearchResults.classList.add("hidden");
+                                });
+                            }
+                        } else {
+                            chatSearchResults.innerHTML = `<div style="padding:10px; font-size:12px; color:#ff4a4a;">Foydalanuvchi topilmadi</div>`;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Chat user search error:", e);
+                    chatSearchResults.innerHTML = `<div style="padding:10px; font-size:12px; color:#ff4a4a;">Qidiruvda xatolik yuz berdi</div>`;
+                }
+            }, 300);
+        });
+    }
+
+    // Sidebar Friend Search
+    if (el.btnToggleFindFriend) {
+        el.btnToggleFindFriend.addEventListener("click", () => {
+            if (!state.currentUser) {
+                openAuthModal("signup");
+                return;
+            }
+            el.friendSearchBox.classList.toggle("hidden");
+            el.inputSearchFriend.value = "";
+            el.friendSearchResults.innerHTML = "";
+        });
+    }
+
+    if (el.btnCloseFriendSearch) {
+        el.btnCloseFriendSearch.addEventListener("click", () => {
+            el.friendSearchBox.classList.add("hidden");
+        });
+    }
+
+    if (el.inputSearchFriend) {
+        let friendSearchDebounce = null;
+        el.inputSearchFriend.addEventListener("input", (e) => {
+            const query = e.target.value.trim();
+            if (query === "") {
+                el.friendSearchResults.innerHTML = "";
+                return;
+            }
+
+            if (friendSearchDebounce) clearTimeout(friendSearchDebounce);
+
+            friendSearchDebounce = setTimeout(async () => {
+                if (!state.currentUser) return;
+                
+                el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);"><i class="fa-solid fa-spinner fa-spin"></i> Qidirilmoqda...</div>`;
+                
+                const token = localStorage.getItem("vibestream_token");
+                if (!token) return;
+
+                try {
+                    const res = await fetch(`${BACKEND_URL}/api/users/search?q=${encodeURIComponent(query)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const user = await res.json();
+                        if (user) {
+                            if (user.username.toLowerCase() === state.currentUser.username.toLowerCase()) {
+                                el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:var(--text-grey);">O'zingizni do'st qilib qo'sha olmaysiz</div>`;
+                                return;
+                            }
+                            const isAlreadyFriend = state.friends.some(f => f.username.toLowerCase() === user.username.toLowerCase());
+                            el.friendSearchResults.innerHTML = `
+                                <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 4px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                                    <span class="search-result-name" style="color:#fff; font-size:13px;">${user.username}</span>
+                                    ${isAlreadyFriend ? 
+                                        `<span style="color:var(--text-grey); font-size:11px;">Allaqachon do'st</span>` : 
+                                        `<button class="btn-add-friend-action" id="btn-sidebar-add-friend" data-username="${user.username}" style="background:var(--spotify-green); border:none; color:#000; padding:2px 8px; border-radius:12px; cursor:pointer; font-size:11px; font-weight:bold;"><i class="fa-solid fa-plus"></i> Qo'shish</button>`
+                                    }
+                                </div>
+                            `;
+
+                            const addBtn = document.getElementById("btn-sidebar-add-friend");
+                            if (addBtn) {
+                                addBtn.addEventListener("click", async () => {
+                                    const uname = addBtn.getAttribute("data-username");
+                                    await addFriendViaAPI(uname);
+                                    el.friendSearchBox.classList.add("hidden");
+                                });
+                            }
+                        } else {
+                            el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
+                        }
+                    } else {
+                        el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
+                    }
+                } catch (err) {
+                    console.error("Search friend error:", err);
+                    el.friendSearchResults.innerHTML = `<div style="font-size:11px; padding: 4px; color:#ff4a4a;">Kiritilgan username noto'g'ri (topilmadi)!</div>`;
+                }
+            }, 300);
+        });
+    }
+
+    // Chat Message Input and Send Button
+    const inputField = document.getElementById("chat-message-input-premium");
+    const sendBtn = document.getElementById("btn-send-message-premium");
+    const closeChatBtn = document.getElementById("btn-close-chat-premium");
+
+    if (inputField) {
+        inputField.addEventListener("input", () => {
+            if (!state.activeChatFriend || !socket) return;
+            
+            socket.emit("typing", { recipient: state.activeChatFriend.username, isTyping: true });
+            
+            if (typingTimeout) clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                socket.emit("typing", { recipient: state.activeChatFriend.username, isTyping: false });
+            }, 2000);
+        });
+
+        inputField.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") sendMessage();
+        });
+    }
+
+    if (sendBtn) {
+        sendBtn.addEventListener("click", sendMessage);
+    }
+
+    if (closeChatBtn) {
+        closeChatBtn.addEventListener("click", () => {
+            state.activeChatFriend = null;
+            const emptyState = document.getElementById("chat-empty-state");
+            const chatContainer = document.getElementById("chat-container-premium");
+            if (emptyState) emptyState.classList.remove("hidden");
+            if (chatContainer) chatContainer.classList.add("hidden");
+            navigateTo("home");
+        });
+    }
+}
+
+// Render chat messages
 function renderChatMessages() {
     const friend = state.activeChatFriend;
     if (!friend) return;
 
+    const msgContainer = document.getElementById("chat-messages-container-premium");
+    if (!msgContainer) return;
+
     if (!friend.chatHistory || friend.chatHistory.length === 0) {
-        el.chatMessagesContainer.innerHTML = `<div style="text-align: center; color: var(--text-grey); font-size: 13px; margin-top: 48px;">Yozishmani boshlash uchun xabar yuboring yoki qo'shiq ulashing!</div>`;
+        msgContainer.innerHTML = `<div style="text-align: center; color: var(--text-grey); font-size: 13px; margin-top: 48px;">Yozishmani boshlash uchun xabar yuboring yoki qo'shiq ulashing!</div>`;
         return;
     }
 
-    el.chatMessagesContainer.innerHTML = friend.chatHistory.map(msg => {
+    msgContainer.innerHTML = friend.chatHistory.map(msg => {
         const isMe = msg.sender.toLowerCase() === state.currentUser.username.toLowerCase();
-        const timeStr = msg.timestamp || "";
+        
+        let timeStr = "";
+        if (msg.timestamp) {
+            const date = new Date(msg.timestamp);
+            timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
         
         let contentHtml = "";
         if (msg.type === "text") {
@@ -1955,16 +2127,17 @@ function renderChatMessages() {
         `;
     }).join('');
 
-    document.querySelectorAll(".btn-play-shared").forEach(btn => {
+    msgContainer.querySelectorAll(".btn-play-shared").forEach(btn => {
         btn.addEventListener("click", () => {
             const songId = btn.getAttribute("data-song-id");
             playSongById(songId);
         });
     });
 
-    el.chatMessagesContainer.scrollTop = el.chatMessagesContainer.scrollHeight;
+    msgContainer.scrollTop = msgContainer.scrollHeight;
 }
 
+// Fetch iTunes Tracks Cache
 async function fetchTracksFromItunesById(songId) {
     if (state.songCache[songId]) return;
     try {
@@ -1982,30 +2155,23 @@ async function fetchTracksFromItunesById(songId) {
     }
 }
 
-async function sendMessage() {
-    const text = el.chatMessageInput.value.trim();
-    if (!text || !state.activeChatFriend || !state.currentUser) return;
+// Send Message
+function sendMessage() {
+    const inputElement = document.getElementById("chat-message-input-premium");
+    if (!inputElement) return;
+    const text = inputElement.value.trim();
+    if (!text || !state.activeChatFriend || !state.currentUser || !socket) return;
 
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newMsg = {
-        id: `msg_${Date.now()}`,
-        sender: state.currentUser.username,
-        type: "text",
+    socket.emit("privateMessage", {
+        recipient: state.activeChatFriend.username,
         content: text,
-        timestamp: time
-    };
+        type: "text"
+    });
 
-    state.activeChatFriend.chatHistory = state.activeChatFriend.chatHistory || [];
-    state.activeChatFriend.chatHistory.push(newMsg);
+    inputElement.value = "";
     
-    renderChatMessages();
-    el.chatMessageInput.value = "";
-    
-    saveToLocalStorage();
-    
-    const chatKey = `chat_${[state.currentUser.username.toLowerCase(), state.activeChatFriend.username.toLowerCase()].sort().join("_")}`;
-    await kvdbPut(chatKey, state.activeChatFriend.chatHistory);
-    notifyRecipient(state.activeChatFriend.username);
+    if (typingTimeout) clearTimeout(typingTimeout);
+    socket.emit("typing", { recipient: state.activeChatFriend.username, isTyping: false });
 }
 
 el.btnSendMessage.addEventListener("click", sendMessage);
@@ -2107,6 +2273,7 @@ function init() {
     loadHomeContent();
 
     renderSidebarPlaylists();
+    setupChatEventListeners();
     
     el.audio.volume = state.playback.volume / 100;
     el.playerVolume.value = state.playback.volume;
@@ -2131,7 +2298,10 @@ function init() {
     // Start background poller for inbox and chats (every 5 seconds)
     setInterval(pollInboxAndChats, 5000);
     
-    console.log("VibeStream Real Music Engine initialized successfully!");
+    // Polling placeholders (using Socket.IO for real-time instead)
 }
+function startChatPolling() {}
+function stopChatPolling() {}
+function pollInboxAndChats() {}
 
 window.onload = init;

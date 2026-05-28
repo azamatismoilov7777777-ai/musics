@@ -1,0 +1,55 @@
+{
+  "users": [
+    {
+      "email": "azamat@gmail.com",
+      "username": "Azamatismoilov",
+      "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+      "friends": [
+        "Murodbek",
+        "Shahzod",
+        "Malika"
+      ],
+      "online": false,
+      "lastActive": 1779951628274
+    },
+    {
+      "email": "murod@gmail.com",
+      "username": "Murodbek",
+      "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+      "friends": [
+        "Azamatismoilov"
+      ],
+      "online": false,
+      "lastActive": 1779951628274
+    },
+    {
+      "email": "shahzod@gmail.com",
+      "username": "Shahzod",
+      "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+      "friends": [
+        "Azamatismoilov"
+      ],
+      "online": false,
+      "lastActive": 1779951628274
+    },
+    {
+      "email": "malika@gmail.com",
+      "username": "Malika",
+      "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+      "friends": [
+        "Azamatismoilov"
+      ],
+      "online": false,
+      "lastActive": 1779951628274
+    },
+    {
+      "email": "fvfvf@hmail.com",
+      "username": "azamat",
+      "passwordHash": "96cae35ce8a9b0244178bf28e4966c2ce1b8385723a96a6b838858cdd6ca0a1e",
+      "friends": [],
+      "online": true,
+      "lastActive": 1779952916965
+    }
+  ],
+  "messages": []
+}

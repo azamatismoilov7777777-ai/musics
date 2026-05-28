@@ -12,9 +12,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Main Style -->
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style-friends.css">
     <!-- Google Identity Services (GIS) and EmailJS SDKs -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -319,33 +321,83 @@
                     </div>
                 </section>
 
-                <!-- 5. Chat View (Telegram-like Chat with Friends) -->
+                <!-- 5. Chat View (Premium Modern Messaging Layout) -->
                 <section class="content-view hidden" id="view-chat">
-                    <div class="chat-container">
-                        <div class="chat-header">
-                            <div class="chat-header-info">
-                                <div class="chat-avatar">
-                                    <i class="fa-solid fa-user-ninja"></i>
+                    <div class="messaging-layout">
+                        <!-- Left Side: Conversation List & User Search -->
+                        <div class="msg-left-pane">
+                            <div class="msg-pane-header">
+                                <h3><i class="fa-solid fa-comments"></i> Chatlar</h3>
+                            </div>
+                            
+                            <!-- Search Bar for Chat View -->
+                            <div class="chat-user-search-wrapper">
+                                <div class="search-input-wrapper-premium">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="chat-user-search-input" placeholder="Foydalanuvchi qidirish...">
                                 </div>
-                                <div class="chat-details">
-                                    <h2 id="chat-friend-name">Do'st nomi</h2>
-                                    <span class="chat-status online">online</span>
+                                <div class="chat-user-search-results hidden" id="chat-user-search-results">
+                                    <!-- Search results will appear here -->
                                 </div>
                             </div>
-                            <div class="chat-header-actions">
-                                <button class="chat-action-btn" id="btn-close-chat" title="Chatni yopish"><i class="fa-solid fa-xmark"></i></button>
+                            
+                            <!-- Recent Chats / Friend List -->
+                            <div class="recent-conversations-list scrollbar-custom" id="recent-conversations-list">
+                                <!-- Dynamically loaded conversations -->
                             </div>
                         </div>
 
-                        <div class="chat-messages-area scrollbar-custom" id="chat-messages-container">
-                            <!-- Message bubbles go here -->
-                        </div>
+                        <!-- Right Side: Active Chat Window or Empty State -->
+                        <div class="msg-right-pane">
+                            <!-- Empty State (Shown when no chat is active) -->
+                            <div class="chat-empty-state" id="chat-empty-state">
+                                <div class="empty-state-content">
+                                    <div class="empty-state-icon">
+                                        <i class="fa-solid fa-paper-plane" style="font-size: 48px; color: #00ffff; filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.4));"></i>
+                                    </div>
+                                    <h2>Muloqot Oynasi</h2>
+                                    <p>Suhbatlashish uchun chap paneldan do'st tanlang yoki uning nomini qidirib toping.</p>
+                                </div>
+                            </div>
 
-                        <div class="chat-input-bar">
-                            <input type="text" id="chat-message-input" placeholder="Xabar yozing...">
-                            <button class="send-message-btn" id="btn-send-message">
-                                <i class="fa-solid fa-paper-plane"></i>
-                            </button>
+                            <!-- Active Chat Container (Hidden by default, shown when activeChatFriend != null) -->
+                            <div class="chat-container-premium hidden" id="chat-container-premium">
+                                <div class="chat-header-premium">
+                                    <div class="chat-header-info-premium">
+                                        <div class="chat-avatar-premium">
+                                            <i class="fa-solid fa-user-ninja"></i>
+                                        </div>
+                                        <div class="chat-details-premium">
+                                            <h2 id="chat-friend-name-premium">Do'st nomi</h2>
+                                            <span class="chat-status-premium offline" id="chat-friend-status-premium">offline</span>
+                                        </div>
+                                    </div>
+                                    <div class="chat-header-actions-premium">
+                                        <button class="chat-action-btn-premium" id="btn-close-chat-premium" title="Yopish"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                </div>
+
+                                <div class="chat-messages-area-premium scrollbar-custom" id="chat-messages-container-premium">
+                                    <!-- Messages bubbles inject here -->
+                                </div>
+
+                                <!-- Typing Indicator -->
+                                <div class="chat-typing-indicator hidden" id="chat-typing-indicator">
+                                    <div class="typing-dots">
+                                        <span class="typing-dot"></span>
+                                        <span class="typing-dot"></span>
+                                        <span class="typing-dot"></span>
+                                    </div>
+                                    <span id="chat-typing-text" style="font-size:12px; margin-left:6px; color:#aaa;">yozmoqda...</span>
+                                </div>
+
+                                <div class="chat-input-bar-premium">
+                                    <input type="text" id="chat-message-input-premium" placeholder="Xabar yozing...">
+                                    <button class="send-message-btn-premium" id="btn-send-message-premium">
+                                        <i class="fa-solid fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
